@@ -1,53 +1,45 @@
-LANxfer is an open-source, offline-first peer-to-peer file transfer tool built for teams and corporate environments where internet access is restricted, unreliable, or simply unnecessary. Unlike relay-based tools (WeTransfer, file.pizza) or cloud-dependent services (Google Drive, Dropbox), LANxfer operates entirely within your local network — no accounts, no cloud storage, no internet required.
+LANxfer is an open-source, offline-first peer-to-peer file transfer tool built for teams and corporate environments where internet access is restricted, unreliable, or simply unnecessary. Unlike relay-based tools (WeTransfer, Filevo) or cloud-dependent services (Google Drive, Dropbox), LANxfer operates entirely within your local network — no accounts, no cloud storage, no internet required, ever.
 
 ## The Problem
 
-Transferring files between devices in a local network still involves unnecessary friction — emailing attachments (size limits), uploading to cloud (privacy concerns), or manually configuring network shares (requires technical setup). Existing tools like AirDrop are platform-locked, and browser-based P2P tools (WebRTC) fail silently on corporate NAT/firewall setups. There is no open-source, cross-platform, offline-native tool with a seamless desktop UX — until now.
+Transferring files between devices on the same network still involves unnecessary friction — emailing attachments hits size limits, cloud services raise privacy concerns, and manual network share configuration requires IT involvement. Browser-based P2P tools using WebRTC fail silently on corporate NAT/firewall setups. Apple's AirDrop is platform-locked. There is no open-source, cross-platform, offline-native tool with a seamless desktop UX — until LANxfer.
 
-## What LANxfer Does
+## How It Works
 
-LANxfer runs as a native system tray application (built with Tauri) that sits quietly in your taskbar. Press a hotkey, and a drag-and-drop overlay appears. Peers on your LAN are auto-discovered via mDNS (Zeroconf) — no IP addresses, no QR codes, no configuration. Drop a file onto a peer and it transfers instantly, encrypted end-to-end using AES-256 with ECDH session key exchange.
+LANxfer runs as a native system tray application (Electron 33) that sits silently in your taskbar. Press a configurable hotkey and a drag-and-drop overlay appears. Peers on your LAN are auto-discovered via mDNS (Zeroconf/Bonjour) — no IP addresses, no QR codes, no configuration needed. Drop a file onto a discovered peer and it transfers instantly, encrypted end-to-end with AES-256-GCM using an ECDH-negotiated session key — a fresh key per transfer, no static secrets.
+
+## Architecture
+
+Electron's main process spawns a Python Flask-SocketIO server on localhost at startup. The React frontend loads inside Electron's BrowserWindow as the tray overlay. The entire transfer engine, encryption, discovery, and state management runs in Python — Electron is purely the native desktop wrapper. This means the backend is fully usable standalone via any browser (including Android), while desktop users get the full native experience.
 
 ## Key Features
 
 - **Zero internet dependency** — works over LAN, Wi-Fi Direct, Hotspot, or mobile tethering
-- **Native tray app** — hotkey-triggered overlay, OS notifications, runs silently in background
-- **mDNS auto-discovery** — peers appear automatically, no IP entry or manual pairing
-- **Resumable block transfers** — chunked transfer with checkpointing; resumes from exact offset after disconnection
-- **AES-256 + ECDH encryption** — fresh session key per transfer, no static secrets
-- **Delta sync** — only transmits changed blocks when re-sending an existing file (rsync algorithm)
-- **Clipboard sharing** — share text, URLs, and code snippets directly from the tray without creating a file
-- **Transfer history** — local SQLite audit log with searchable, exportable records
-- **Cross-platform** — Windows, macOS, Linux, and Android (browser-based peer)
-- **Parallel multi-stream chunking** — saturates LAN bandwidth by splitting large files across concurrent streams
+- **Native tray app** — hotkey-triggered overlay, OS notifications, background operation (Electron)
+- **mDNS auto-discovery** — peers appear automatically via python-zeroconf, no IP entry ever
+- **Resumable block transfers** — files split into 4MB SHA-256-verified chunks; resumes from exact offset after disconnection
+- **AES-256-GCM + ECDH encryption** — session key negotiated fresh per transfer via Elliptic Curve Diffie-Hellman
+- **Delta sync** — re-sending a modified file transmits only changed byte ranges using librsync (rsync algorithm)
+- **Clipboard sharing** — share text, URLs, and code snippets from the tray context menu without creating a file
+- **Transfer history** — local SQLite audit log; searchable, filterable, exportable
+- **Parallel multi-stream chunking** — large files split across concurrent Socket.IO streams to saturate LAN bandwidth
+- **Cross-platform** — Windows, macOS, Linux (Electron), and Android (browser peer via Flask)
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Desktop Shell | Tauri 2.0 (Rust) |
-| Backend / Transfer Engine | Python, Flask, Flask-SocketIO |
-| Frontend UI | React, TailwindCSS |
-| Peer Discovery | python-zeroconf (mDNS) |
-| Encryption | AES-256-GCM + ECDH (cryptography library) |
-| Delta Sync | librsync / rolling checksum |
-| Transfer State | SQLite |
-| Real-time Progress | WebSockets (Socket.IO) |
+| Desktop Shell | Electron 33 + electron-builder |
+| Transfer Engine | Python, Flask, Flask-SocketIO |
+| Frontend | React, TailwindCSS |
+| Peer Discovery | python-zeroconf (mDNS/Bonjour) |
+| Encryption | AES-256-GCM + ECDH (Python cryptography lib) |
+| Block Transfer | Custom chunked transfer + SHA-256 verification |
+| Delta Sync | librsync (python-librsync bindings) |
+| Transfer State | SQLite (Python built-in sqlite3) |
+| Real-time Progress | WebSockets via Flask-SocketIO + socket.io-client |
+| Packaging | electron-builder (.exe / .dmg / .deb / .AppImage) |
 
-## Why Tauri over Electron
+## Demo Scenario
 
-Tauri uses the OS-native webview and a Rust core, resulting in ~96% smaller bundle size and ~58% less memory usage compared to Electron — critical for a background tray app that should feel invisible.
-
-## Competitive Differentiation
-
-Compared to other submissions in this hackathon:
-- **vs. Filevo** — Filevo routes all data through a relay server and requires internet. LANxfer is truly serverless and offline.
-- **vs. ECO** — ECO uses WebRTC which fails on corporate NAT. LANxfer uses direct HTTP/WebSocket over LAN with no NAT dependency. Delta sync (rsync) is also more practically useful than Huffman coding for real-world file types.
-- **vs. LocalSend / LANDrop** — Closed-architecture or limited extensibility. LANxfer is fully open-source, self-hostable, and hackable.
-
-## Use Cases
-
-- Engineering teams sharing build artifacts, logs, and configs without touching the internet
-- Offices with air-gapped or restricted networks
-- Field deployments (factories, hospitals, research stations) with no cloud access
-- Quick device-to-device transfer without setting up shared folders or USB drives
+Two laptops and a phone on a shared hotspot. Press hotkey → tray overlay appears → phone and second laptop auto-discovered via mDNS → drag a 2GB file → live per-chunk progress via Socket.IO → kill the Wi-Fi mid-transfer → reconnect → transfer resumes from exact byte offset → OS notification fires on completion → transfer log entry written to SQLite. Under 60 seconds, zero configuration, zero internet.
