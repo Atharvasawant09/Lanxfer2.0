@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LANxfer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>LANxfer</h1>
+
+    <div class="upload-container" id="dropZone">
+        <div class="upload-prompt">
+            <div class="upload-icon">🗃️</div>
+            <div>Drag & drop files here</div>
+            <div>or</div>
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput">
+                <button type="button">Choose File</button>
+            </div>
+            <div class="recipient-wrapper">
+                <select id="recipientSelect">
+                    <option value="Everyone">Everyone</option>
+                </select>
+                <button onclick="fetchIPs()" id="refreshIPsButton">Refresh IPs</button>
+            </div>
+        </div>
+        <div class="selected-file" id="selectedFile"></div>
+        <div class="progress-wrapper">
+            <div class="progress-container">
+                <div class="progress-bar"></div>
+            </div>
+            <div class="progress-text">0%</div>
+        </div>
+        <button onclick="uploadFile()" id="uploadButton">Upload</button>
+    </div>
+
+    <h3>Available Files</h3>
+    <table id="fileTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th class="sortable" data-sort="name">File Name</th>
+                <th class="sortable" data-sort="size">Size</th>
+                <th class="sortable" data-sort="modified">Modified Date</th>
+                <th>Download</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
