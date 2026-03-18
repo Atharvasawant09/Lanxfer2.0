@@ -7,12 +7,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>LANxfer</h1>
+    <h1>LANxfer <span style="font-size:0.5em; opacity:0.6;">v2.0</span></h1>
 
     <div class="upload-container" id="dropZone">
         <div class="upload-prompt">
             <div class="upload-icon">🗃️</div>
-            <div>Drag & drop files here</div>
+            <div>Drag &amp; drop files here</div>
             <div>or</div>
             <div class="file-input-wrapper">
                 <input type="file" id="fileInput">
@@ -22,7 +22,7 @@
                 <select id="recipientSelect">
                     <option value="Everyone">Everyone</option>
                 </select>
-                <button onclick="fetchIPs()" id="refreshIPsButton">Refresh IPs</button>
+                <button onclick="fetchIPs()" id="refreshIPsButton">Refresh Peers</button>
             </div>
         </div>
         <div class="selected-file" id="selectedFile"></div>
@@ -42,15 +42,17 @@
                 <th>#</th>
                 <th class="sortable" data-sort="name">File Name</th>
                 <th class="sortable" data-sort="size">Size</th>
-                <th class="sortable" data-sort="modified">Modified Date</th>
+                <th class="sortable" data-sort="modified">Uploaded</th>
                 <th>Download</th>
             </tr>
         </thead>
-        <tbody>
-        </tbody>
+        <tbody></tbody>
     </table>
 
+    <!-- CryptoJS: AES decrypt + SHA-256 hashing (works on HTTP, no HTTPS needed) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Socket.IO client -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

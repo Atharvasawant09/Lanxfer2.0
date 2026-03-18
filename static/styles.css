@@ -1,0 +1,211 @@
+/* Cyberpunk Theme */
+body {
+    background-color: black;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    position: relative;
+    margin: 0;
+    min-height: 100vh;
+}
+
+h1, h2, h3 {
+    text-shadow: 0px 0px 10px #33ff33;
+}
+
+.upload-container {
+    margin: 30px auto;
+    width: 80%;
+    max-width: 600px;
+    border: 2px dashed #33ff33;
+    padding: 20px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.upload-container.drag-over {
+    background: rgba(51, 255, 51, 0.1);
+    transform: scale(1.02);
+}
+
+.file-input-wrapper {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.file-input-wrapper input[type="file"] {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.upload-prompt {
+    padding: 0px;
+    font-size: 1.2em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.upload-icon {
+    font-size: 3em;
+    margin-bottom: 10px;
+}
+
+.selected-file {
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(51, 255, 51, 0.1);
+    border-radius: 5px;
+    display: none;
+}
+
+.progress-wrapper {
+    width: 100%;
+    margin: 10px 0;
+    display: none;
+}
+
+.progress-container {
+    width: 100%;
+    background: rgba(51, 255, 51, 0.1);
+    border: 1px solid #33ff33;
+    border-radius: 20px;
+    height: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #33ff33, #00ff00);
+    position: absolute;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px #33ff33;
+}
+
+.progress-text {
+    width: 100%;
+    text-align: center;
+    color: #33ff33;
+    text-shadow: 0 0 5px #33ff33;
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+button {
+    background: transparent;
+    color: #33ff33;
+    border: 2px solid #33ff33;
+    padding: 12px 25px;
+    cursor: pointer;
+    transition: 0.3s;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: bold;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+button:hover {
+    background: #33ff33;
+    color: black;
+    text-shadow: 0px 0px 10px #33ff33;
+    box-shadow: 0 0 15px rgba(51, 255, 51, 0.5);
+}
+
+table {
+    width: 80%;
+    margin: 20px auto;
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid #33ff33;
+    padding: 10px;
+    text-align: left;
+    color: #33ff33;
+}
+
+th {
+    background-color: rgba(0, 255, 0, 0.2);
+    text-transform: uppercase;
+}
+
+th.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 25px;
+}
+
+th.sortable:hover {
+    background-color: rgba(0, 255, 0, 0.3);
+}
+
+th.sortable::after {
+    content: '⇅';
+    position: absolute;
+    right: 8px;
+    opacity: 0.5;
+}
+
+th.sortable.asc::after {
+    content: '↑';
+    opacity: 1;
+}
+
+th.sortable.desc::after {
+    content: '↓';
+    opacity: 1;
+}
+
+tr:hover {
+    background-color: rgba(0, 255, 0, 0.1);
+}
+
+a {
+    color: #33ff33;
+    text-decoration: none;
+}
+
+a:hover {
+    text-shadow: 0px 0px 10px #33ff33;
+}
+
+#recipientSelect {
+    background: transparent;
+    border: 2px solid #33ff33;
+    color: #33ff33;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 0;
+    width: 70%;
+    max-width: 250px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+}
+
+#recipientSelect option {
+    background: black;
+    color: #33ff33;
+}
+
+.recipient-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#refreshIPsButton {
+    padding: 11px 20px;
+    margin-top: 0;
+    white-space: nowrap;
+    min-width: 150px;
+}
