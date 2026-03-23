@@ -18,7 +18,7 @@ from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', max_http_buffer_size=500 * 1024 * 1024)
 
 UPLOAD_FOLDER        = 'uploads'
 CHUNKS_FOLDER        = 'chunks'
