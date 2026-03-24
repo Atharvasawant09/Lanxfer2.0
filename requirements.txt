@@ -4,3 +4,4 @@ zeroconf
 cryptography
 pycryptodome
 eventlet
+qrcode[pil]==8.1.0

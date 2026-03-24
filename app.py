@@ -7,6 +7,9 @@ import threading
 import socket
 import hashlib
 import json
+import qrcode
+import base64
+from io import BytesIO
 from datetime import datetime, timedelta
 from flask import redirect
 from cryptography.hazmat.primitives.asymmetric.ec import (
@@ -301,6 +304,40 @@ def heartbeat():
     return jsonify({'status': 'ok', 'ip': request.remote_addr})
 
 
+@app.route('/qr_code')
+def get_qr_code():
+    """Generate QR code containing connection info for mobile pairing."""
+    payload = json.dumps({
+        'ip':          LOCAL_IP,
+        'port':        5000,
+        'device_name': DEVICE_NAME,
+        'version':     '2.0'
+    })
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=8,
+        border=4
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="#00ff00", back_color="black")
+
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    log_event('QR_GENERATED', request.remote_addr)
+    return jsonify({
+        'qr_image':    f"data:image/png;base64,{img_b64}",
+        'ip':          LOCAL_IP,
+        'port':        5000,
+        'device_name': DEVICE_NAME,
+        'connect_url': f"https://{LOCAL_IP}:5000"
+    })
 
 
 

@@ -27,6 +27,23 @@
             </div>
         </div>
     </div>
+    <!-- QR Code Pairing Modal -->
+<div id="qrModal" class="dialog-overlay" style="display:none;">
+    <div class="dialog-box qr-dialog">
+        <h2>📱 Scan to Connect</h2>
+        <p>Scan this QR code with your phone's camera to connect instantly</p>
+        <div class="qr-container">
+            <img id="qrImage" src="" alt="QR Code" class="qr-image">
+            <div class="qr-loading" id="qrLoading">⏳ Generating...</div>
+        </div>
+        <div class="qr-info">
+            <div class="qr-url" id="qrUrl"></div>
+            <div class="qr-device" id="qrDevice"></div>
+        </div>
+        <p class="qr-hint">📌 Make sure your phone is on the same Wi-Fi network</p>
+        <button onclick="closeQRModal()" class="btn-close-qr">✖ Close</button>
+    </div>
+</div>
 
     <div class="upload-container" id="dropZone">
         <div class="upload-prompt">
@@ -43,6 +60,11 @@
                 </select>
                 <button onclick="fetchIPs()" id="refreshIPsButton">Refresh Peers</button>
             </div>
+            <!-- QR Code Pairing Button -->
+            <button type="button" onclick="showQRCode()" id="qrButton">
+            📱 Show QR Code
+            </button>
+
         </div>
         <div class="selected-file" id="selectedFile"></div>
         <div class="progress-wrapper">

@@ -515,3 +515,44 @@ function hexToBuffer(hex) {
     }
     return bytes;
 }
+
+// ─────────────────────────────────────────────
+// QR Code Peer Pairing
+// ─────────────────────────────────────────────
+
+function showQRCode() {
+    const modal   = document.getElementById('qrModal');
+    const img     = document.getElementById('qrImage');
+    const loading = document.getElementById('qrLoading');
+    const urlEl   = document.getElementById('qrUrl');
+    const devEl   = document.getElementById('qrDevice');
+
+    // Reset state
+    img.style.display     = 'none';
+    loading.style.display = 'block';
+    modal.style.display   = 'flex';
+
+    fetch('/qr_code')
+        .then(r => r.json())
+        .then(data => {
+            img.src           = data.qr_image;
+            img.style.display = 'block';
+            loading.style.display = 'none';
+            urlEl.textContent = `🌐 ${data.connect_url}`;
+            devEl.textContent = `💻 ${data.device_name}`;
+        })
+        .catch(err => {
+            loading.textContent = `❌ Failed: ${err.message}`;
+        });
+}
+
+function closeQRModal() {
+    document.getElementById('qrModal').style.display = 'none';
+}
+
+// Close QR modal on backdrop click
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('qrModal').addEventListener('click', function (e) {
+        if (e.target === this) closeQRModal();
+    });
+});

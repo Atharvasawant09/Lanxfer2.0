@@ -294,3 +294,80 @@ a:hover {
     color: black;
     box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
 }
+
+/* ── QR Code Modal ── */
+.qr-dialog {
+    max-width: 380px;
+}
+
+.qr-container {
+    background: black;
+    border: 2px solid #33ff33;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px auto;
+    width: fit-content;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(51, 255, 51, 0.3);
+}
+
+.qr-image {
+    display: none;
+    width: 200px;
+    height: 200px;
+    image-rendering: pixelated;
+}
+
+.qr-loading {
+    color: #ffaa00;
+    font-size: 1.1em;
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
+
+.qr-info {
+    margin: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.qr-url {
+    color: #00ffff;
+    font-size: 0.95em;
+    font-weight: bold;
+    text-shadow: 0 0 6px #00ffff;
+    word-break: break-all;
+}
+
+.qr-device {
+    color: #aaa;
+    font-size: 0.85em;
+}
+
+.qr-hint {
+    color: #888;
+    font-size: 0.8em;
+    margin: 8px 0;
+}
+
+.btn-close-qr {
+    margin-top: 10px;
+    border-color: #888;
+    color: #888;
+    padding: 8px 20px;
+}
+
+.btn-close-qr:hover {
+    background: #888;
+    color: black;
+    box-shadow: none;
+}
+
