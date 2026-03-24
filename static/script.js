@@ -2,29 +2,39 @@
 // Constants & State
 // ─────────────────────────────────────────────
 
-// Phase 1: kept for download decrypt — replaced in Phase 2
-const SECRET_KEY_HEX = '546869734973415365637265744b657931323334353637383930313233343536';
-const CHUNK_SIZE     = 4 * 1024 * 1024; // 4MB
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
 
-let currentSort    = { column: 'name', direction: 'asc' };
-let activeTransfers = {}; // { sessionId: { file, totalChunks, sessionId } }
+let currentSort             = { column: 'name', direction: 'asc' };
+let activeTransfers         = {};
+let sessionKey              = null;
+let deviceFingerprint       = null;
+let clientKeyPair           = null;
+let DEVICE_NAME_FROM_SERVER = '';
 
 // ─────────────────────────────────────────────
-// Socket.IO
+// Socket.IO — initialized FIRST, polling forced
+// for compatibility with restricted networks
 // ─────────────────────────────────────────────
 
-const socket = io();
+const socket = io(window.__SOCKET_OPTS || {});
 
 socket.on('connect', () => {
-    console.log('[WS] Connected to LANxfer server');
+    console.log('[WS] Connected via', socket.io.engine.transport.name);
+    // 300ms delay — gives polling transport time to stabilize before key exchange
+    setTimeout(() => {
+        initKeyExchange();
+    }, 300);
 });
 
 socket.on('disconnect', () => {
-    console.log('[WS] Disconnected — transfers will resume on reconnect');
+    sessionKey = null;
+    console.log('[WS] Disconnected');
+    updateSecurityStatus('🔴 Disconnected', 'error');
 });
 
 socket.on('server_info', (info) => {
-    console.log(`[WS] Server: ${info.device_name} @ ${info.ip} v${info.version}`);
+    DEVICE_NAME_FROM_SERVER = info.device_name;
+    console.log(`[WS] Server: ${info.device_name} @ ${info.ip} v${info.version} | ${info.security}`);
 });
 
 socket.on('transfer_complete', (data) => {
@@ -61,11 +71,146 @@ socket.on('transfer_error', (data) => {
 
 socket.on('chunk_error', (data) => {
     console.error(`[WS] Chunk ${data.chunk_index} error: ${data.reason}`);
-    if (data.reason === 'hash_mismatch') {
+    if (data.reason === 'hash_mismatch' || data.reason === 'decryption_failed') {
         const transfer = Object.values(activeTransfers)[0];
         if (transfer) retryChunk(transfer, data.chunk_index);
     }
 });
+
+socket.on('key_exchange_reply', async (data) => {
+    try {
+        const serverPubRaw = hexToBuffer(data.server_public_key);
+        const salt         = hexToBuffer(data.salt);
+        deviceFingerprint  = data.fingerprint;
+
+        // Import server's P-256 public key
+        const serverPubKey = await crypto.subtle.importKey(
+            'raw',
+            serverPubRaw,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            []
+        );
+
+        // ECDH shared bits
+        const sharedBits = await crypto.subtle.deriveBits(
+            { name: 'ECDH', public: serverPubKey },
+            clientKeyPair.privateKey,
+            256
+        );
+
+        // HKDF → AES-256-GCM session key
+        const hkdfKey = await crypto.subtle.importKey(
+            'raw', sharedBits, 'HKDF', false, ['deriveKey']
+        );
+
+        sessionKey = await crypto.subtle.deriveKey(
+            {
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: salt,
+                info: new TextEncoder().encode('lanxfer-v2-session')
+            },
+            hkdfKey,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt']
+        );
+
+        console.log(`[ECDH] Session key derived | fingerprint: ${deviceFingerprint}`);
+
+        if (!data.trusted) {
+            showFingerprintDialog(deviceFingerprint, data.device_name);
+        } else {
+            updateSecurityStatus(`🔒 Secure | ${deviceFingerprint}`, 'secure');
+        }
+
+    } catch (e) {
+        console.error('[ECDH] Key derivation failed:', e);
+        updateSecurityStatus('⚠️ Key derivation failed', 'error');
+    }
+});
+
+socket.on('key_exchange_error', (data) => {
+    console.error('[ECDH] Server error:', data.reason);
+    updateSecurityStatus('⚠️ Key exchange error: ' + data.reason, 'error');
+});
+
+// ─────────────────────────────────────────────
+// ECDH Key Exchange
+// ─────────────────────────────────────────────
+
+async function initKeyExchange() {
+    try {
+        // Generate ephemeral P-256 keypair — matches server SECP256R1
+        clientKeyPair = await crypto.subtle.generateKey(
+            { name: 'ECDH', namedCurve: 'P-256' },
+            true,
+            ['deriveKey', 'deriveBits']
+        );
+
+        const pubKeyRaw = await crypto.subtle.exportKey('raw', clientKeyPair.publicKey);
+        const pubKeyHex = bufferToHex(pubKeyRaw);
+
+        console.log('[ECDH] P-256 keypair generated, sending to server...');
+        updateSecurityStatus('🔑 Performing key exchange...', 'pending');
+
+        socket.emit('key_exchange', { client_public_key: pubKeyHex });
+
+    } catch (e) {
+        console.error('[ECDH] Key generation failed:', e);
+        updateSecurityStatus('⚠️ Key generation failed: ' + e.message, 'error');
+    }
+}
+
+// ─────────────────────────────────────────────
+// Security Status UI
+// ─────────────────────────────────────────────
+
+function updateSecurityStatus(message, state) {
+    const el = document.getElementById('securityStatus');
+    if (!el) return;
+    el.textContent = message;
+    el.className   = `security-status ${state}`;
+}
+
+function showFingerprintDialog(fingerprint, deviceName) {
+    const dialog = document.getElementById('fingerprintDialog');
+    const fpEl   = document.getElementById('fingerprintValue');
+    const nameEl = document.getElementById('fingerprintDeviceName');
+    if (!dialog) return;
+    fpEl.textContent     = fingerprint;
+    nameEl.textContent   = deviceName;
+    dialog.style.display = 'flex';
+}
+
+function trustDevice() {
+    const dialog = document.getElementById('fingerprintDialog');
+    if (dialog) dialog.style.display = 'none';
+
+    fetch('/trust_device', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            ip:          window.location.hostname,
+            fingerprint: deviceFingerprint,
+            device_name: DEVICE_NAME_FROM_SERVER || 'Server'
+        })
+    })
+    .then(() => {
+        updateSecurityStatus(`🔒 Trusted | ${deviceFingerprint}`, 'secure');
+        console.log('[Trust] Device trusted and saved');
+    })
+    .catch(err => console.error('[Trust] Failed to save:', err));
+}
+
+function denyDevice() {
+    const dialog = document.getElementById('fingerprintDialog');
+    if (dialog) dialog.style.display = 'none';
+    updateSecurityStatus('⛔ Connection untrusted — uploads blocked', 'untrusted');
+    console.warn('[Trust] Device denied — sessionKey cleared');
+    sessionKey = null;
+}
 
 // ─────────────────────────────────────────────
 // DOM Ready
@@ -84,14 +229,8 @@ document.addEventListener('DOMContentLoaded', function () {
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
-    });
-
+    ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, highlight, false));
+    ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, unhighlight, false));
     dropZone.addEventListener('drop', handleDrop, false);
 
     document.querySelectorAll('th.sortable').forEach(header => {
@@ -127,29 +266,16 @@ document.addEventListener('DOMContentLoaded', function () {
 // Drag & Drop
 // ─────────────────────────────────────────────
 
-function preventDefaults(e) {
-    e.preventDefault();
-    e.stopPropagation();
-}
-
-function highlight() {
-    document.getElementById('dropZone').classList.add('drag-over');
-}
-
-function unhighlight() {
-    document.getElementById('dropZone').classList.remove('drag-over');
-}
-
-function handleDrop(e) {
-    handleFileSelect(e.dataTransfer.files[0]);
-}
+function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+function highlight()   { document.getElementById('dropZone').classList.add('drag-over'); }
+function unhighlight() { document.getElementById('dropZone').classList.remove('drag-over'); }
+function handleDrop(e) { handleFileSelect(e.dataTransfer.files[0]); }
 
 function handleFileSelect(file) {
     if (!file) return;
     const dt = new DataTransfer();
     dt.items.add(file);
     document.getElementById('fileInput').files = dt.files;
-
     const div         = document.getElementById('selectedFile');
     div.style.display = 'block';
     div.textContent   = `Selected: ${file.name} (${formatSize(file.size)})`;
@@ -160,6 +286,21 @@ function formatSize(bytes) {
     let i = 0;
     while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
     return `${bytes.toFixed(1)} ${units[i]}`;
+}
+
+// ─────────────────────────────────────────────
+// AES-256-GCM Chunk Encryption
+// ─────────────────────────────────────────────
+
+async function encryptChunk(plaintext) {
+    if (!sessionKey) throw new Error('No session key — key exchange incomplete');
+    const nonce      = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: nonce },
+        sessionKey,
+        plaintext
+    );
+    return { nonce, ciphertext: new Uint8Array(ciphertext) };
 }
 
 // ─────────────────────────────────────────────
@@ -176,15 +317,21 @@ function uploadFile() {
     const file      = fileInput.files[0];
     const recipient = recipientSelect.value || 'Everyone';
 
-    if (!file) { alert('Please select a file first.'); return; }
+    if (!file) {
+        alert('Please select a file first.');
+        return;
+    }
+    if (!sessionKey) {
+        alert('Security handshake not complete. Please wait a moment and try again.');
+        return;
+    }
 
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-    // UUID fallback — crypto.randomUUID() requires HTTPS, this works on HTTP LAN
+    // UUID without crypto.randomUUID() — works on HTTP LAN
     const sessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
 
     progressWrapper.style.display = 'block';
@@ -205,31 +352,34 @@ function uploadFile() {
         if (data.session_id !== sessionId) return;
 
         const missingChunks = data.missing_chunks;
-        console.log(`[Upload] ${data.resume ? 'Resuming' : 'Starting'} — ${missingChunks.length} chunks to send`);
+        console.log(`[Upload] ${data.resume ? 'Resuming' : 'Starting'} — ${missingChunks.length} chunks`);
 
         let sentCount = 0;
 
         for (const chunkIndex of missingChunks) {
-            const start      = chunkIndex * CHUNK_SIZE;
-            const end        = Math.min(start + CHUNK_SIZE, file.size);
-            const chunkBlob  = file.slice(start, end);
-            const arrayBuf   = await chunkBlob.arrayBuffer();
-            const chunkArray = new Uint8Array(arrayBuf);
+            const start     = chunkIndex * CHUNK_SIZE;
+            const end       = Math.min(start + CHUNK_SIZE, file.size);
+            const arrayBuf  = await file.slice(start, end).arrayBuffer();
+            const plaintext = new Uint8Array(arrayBuf);
 
-            // CryptoJS SHA-256 — works on HTTP (no HTTPS required unlike crypto.subtle)
-            const wordArray = CryptoJS.lib.WordArray.create(chunkArray);
+            // SHA-256 of plaintext — server verifies after GCM decrypt
+            const wordArray = CryptoJS.lib.WordArray.create(plaintext);
             const hashHex   = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+
+            // AES-256-GCM encrypt
+            const { nonce, ciphertext } = await encryptChunk(plaintext);
 
             socket.emit('transfer_chunk', {
                 session_id:  sessionId,
                 chunk_index: chunkIndex,
-                chunk_data:  Array.from(chunkArray),  // safe across all browsers + mobile
+                nonce:       bufferToHex(nonce),
+                ciphertext:  Array.from(ciphertext),
                 chunk_hash:  hashHex
             });
 
-            // Wait for ACK before next chunk (flow control)
+            // Wait for ACK before sending next chunk — flow control
             await new Promise((resolve) => {
-                socket.once('chunk_ack', (ack) => {
+                socket.once('chunk_ack', () => {
                     sentCount++;
                     const percent = Math.round((sentCount / missingChunks.length) * 100);
                     progressBar.style.width  = `${percent}%`;
@@ -243,19 +393,21 @@ function uploadFile() {
 
 async function retryChunk(transfer, chunkIndex) {
     const { file, sessionId } = transfer;
-    const start      = chunkIndex * CHUNK_SIZE;
-    const end        = Math.min(start + CHUNK_SIZE, file.size);
-    const chunkBlob  = file.slice(start, end);
-    const arrayBuf   = await chunkBlob.arrayBuffer();
-    const chunkArray = new Uint8Array(arrayBuf);
-    const wordArray  = CryptoJS.lib.WordArray.create(chunkArray);
-    const hashHex    = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+    const start     = chunkIndex * CHUNK_SIZE;
+    const end       = Math.min(start + CHUNK_SIZE, file.size);
+    const arrayBuf  = await file.slice(start, end).arrayBuffer();
+    const plaintext = new Uint8Array(arrayBuf);
+
+    const wordArray = CryptoJS.lib.WordArray.create(plaintext);
+    const hashHex   = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+    const { nonce, ciphertext } = await encryptChunk(plaintext);
 
     console.log(`[Upload] Retrying chunk ${chunkIndex}`);
     socket.emit('transfer_chunk', {
         session_id:  sessionId,
         chunk_index: chunkIndex,
-        chunk_data:  Array.from(chunkArray),
+        nonce:       bufferToHex(nonce),
+        ciphertext:  Array.from(ciphertext),
         chunk_hash:  hashHex
     });
 }
@@ -269,13 +421,12 @@ function fetchFiles() {
         sort:  currentSort.column,
         order: currentSort.direction
     });
-
     fetch(`/get_files?${queryParams}`)
         .then(r => r.json())
         .then(files => populateFileTable(files))
         .catch(err => {
-            const tbody = document.querySelector('#fileTable tbody');
-            tbody.innerHTML = `<tr><td colspan="5">Error loading files: ${err.message}</td></tr>`;
+            document.querySelector('#fileTable tbody').innerHTML =
+                `<tr><td colspan="5">Error loading files: ${err.message}</td></tr>`;
         });
 }
 
@@ -296,7 +447,7 @@ function populateFileTable(files) {
             <td>${file.size_fmt}</td>
             <td>${file.modified_fmt}</td>
             <td>
-                <button onclick="downloadAndDecrypt('${escapeHtml(file.name)}', '${escapeHtml(file.original_name)}')">
+                <button onclick="downloadFile('${escapeHtml(file.name)}')">
                     📥 Download
                 </button>
             </td>
@@ -307,10 +458,21 @@ function populateFileTable(files) {
 
 function escapeHtml(str) {
     return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────
+// Download — server streams plaintext directly
+// ─────────────────────────────────────────────
+
+function downloadFile(storageName) {
+    const a    = document.createElement('a');
+    a.href     = `/download/${storageName}`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 // ─────────────────────────────────────────────
@@ -324,9 +486,7 @@ function fetchIPs() {
     fetch('/get_ips')
         .then(r => r.json())
         .then(peers => {
-            while (recipientSelect.options.length > 1) {
-                recipientSelect.remove(1);
-            }
+            while (recipientSelect.options.length > 1) recipientSelect.remove(1);
             peers.forEach(peer => {
                 const option       = document.createElement('option');
                 option.value       = peer.ip;
@@ -340,44 +500,18 @@ function fetchIPs() {
 }
 
 // ─────────────────────────────────────────────
-// Download & Decrypt
-// Phase 1: client-side AES-CBC — replaced in Phase 2
+// Utility
 // ─────────────────────────────────────────────
 
-function downloadAndDecrypt(encryptedFilename, originalFilename) {
-    fetch(`/download/${encryptedFilename}`)
-        .then(response => {
-            if (!response.ok) throw new Error('Failed to fetch file');
-            return response.arrayBuffer();
-        })
-        .then(encryptedData => {
-            const encryptedBytes = new Uint8Array(encryptedData);
-            const iv             = encryptedBytes.slice(0, 16);
-            const ciphertext     = encryptedBytes.slice(16);
-            const key            = CryptoJS.enc.Hex.parse(SECRET_KEY_HEX);
-            const ivWordArray    = CryptoJS.lib.WordArray.create(iv);
-            const ciphertextWA   = CryptoJS.lib.WordArray.create(ciphertext);
+function bufferToHex(buf) {
+    return Array.from(buf instanceof Uint8Array ? buf : new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-            const decrypted = CryptoJS.AES.decrypt(
-                { ciphertext: ciphertextWA },
-                key,
-                { iv: ivWordArray, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
-            );
-
-            const decryptedHex   = decrypted.toString(CryptoJS.enc.Hex);
-            const decryptedBytes = new Uint8Array(
-                decryptedHex.match(/.{1,2}/g).map(b => parseInt(b, 16))
-            );
-
-            const blob = new Blob([decryptedBytes], { type: 'application/octet-stream' });
-            const url  = window.URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = originalFilename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        })
-        .catch(err => alert(`Download failed: ${err.message}`));
+function hexToBuffer(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
 }

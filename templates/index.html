@@ -9,6 +9,25 @@
 <body>
     <h1>LANxfer <span style="font-size:0.5em; opacity:0.6;">v2.0</span></h1>
 
+    <!-- Security Status Bar -->
+    <div id="securityStatus" class="security-status pending">
+        🔑 Performing key exchange...
+    </div>
+
+    <!-- Device Fingerprint Trust Dialog -->
+    <div id="fingerprintDialog" class="dialog-overlay" style="display:none;">
+        <div class="dialog-box">
+            <h2>⚠️ New Device</h2>
+            <p>Verify this server fingerprint matches on the other device:</p>
+            <div class="fingerprint-value" id="fingerprintValue"></div>
+            <p class="dialog-device-name">Server: <span id="fingerprintDeviceName"></span></p>
+            <div class="dialog-buttons">
+                <button onclick="trustDevice()">✅ Trust &amp; Connect</button>
+                <button onclick="denyDevice()" class="btn-danger">⛔ Deny</button>
+            </div>
+        </div>
+    </div>
+
     <div class="upload-container" id="dropZone">
         <div class="upload-prompt">
             <div class="upload-icon">🗃️</div>
@@ -49,10 +68,19 @@
         <tbody></tbody>
     </table>
 
-    <!-- CryptoJS: AES decrypt + SHA-256 hashing (works on HTTP, no HTTPS needed) -->
+    <!-- CryptoJS: SHA-256 chunk hashing only -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <!-- Socket.IO client -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <!-- Force polling transport — college/restricted WiFi blocks WebSocket upgrade -->
+   <script>
+    window.__SOCKET_OPTS = {
+        transports: ['polling'],
+        upgrade: false,
+        secure: true,                    // use wss/https
+        rejectUnauthorized: false        // accept self-signed cert
+    };
+</script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

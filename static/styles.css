@@ -209,3 +209,88 @@ a:hover {
     white-space: nowrap;
     min-width: 150px;
 }
+
+
+/* ── Security Status Bar ── */
+.security-status {
+    display: inline-block;
+    margin: 10px auto;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border: 1px solid #33ff33;
+}
+
+.security-status.pending  { color: #ffaa00; border-color: #ffaa00; }
+.security-status.secure   { color: #33ff33; border-color: #33ff33; text-shadow: 0 0 5px #33ff33; }
+.security-status.untrusted{ color: #ff4444; border-color: #ff4444; }
+.security-status.error    { color: #ff4444; border-color: #ff4444; }
+
+/* ── Fingerprint Trust Dialog ── */
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.dialog-box {
+    background: #0a0a0a;
+    border: 2px solid #33ff33;
+    border-radius: 10px;
+    padding: 30px 40px;
+    max-width: 480px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(51, 255, 51, 0.3);
+}
+
+.dialog-box h2 {
+    margin-top: 0;
+    color: #ffaa00;
+    text-shadow: 0 0 10px #ffaa00;
+}
+
+.fingerprint-value {
+    font-size: 1.3em;
+    font-weight: bold;
+    letter-spacing: 3px;
+    color: #00ffff;
+    text-shadow: 0 0 8px #00ffff;
+    background: rgba(0, 255, 255, 0.05);
+    border: 1px solid #00ffff;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 15px 0;
+    font-family: 'Courier New', monospace;
+    word-break: break-all;
+}
+
+.dialog-device-name {
+    color: #aaa;
+    font-size: 0.9em;
+}
+
+.dialog-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn-danger {
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.btn-danger:hover {
+    background: #ff4444;
+    color: black;
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+}
