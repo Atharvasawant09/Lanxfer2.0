@@ -62,3 +62,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# SSL Certificates
+*.pem
+cert.pem
+key.pem
