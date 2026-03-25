@@ -307,12 +307,7 @@ def heartbeat():
 @app.route('/qr_code')
 def get_qr_code():
     """Generate QR code containing connection info for mobile pairing."""
-    payload = json.dumps({
-        'ip':          LOCAL_IP,
-        'port':        5000,
-        'device_name': DEVICE_NAME,
-        'version':     '2.0'
-    })
+    payload = f"https://{LOCAL_IP}:5000"
 
     qr = qrcode.QRCode(
         version=1,
