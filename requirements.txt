@@ -5,3 +5,4 @@ cryptography
 pycryptodome
 eventlet
 qrcode[pil]==8.1.0
+python-dateutil==2.9.0

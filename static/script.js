@@ -119,10 +119,20 @@ socket.on('key_exchange_reply', async (data) => {
 
         console.log(`[ECDH] Session key derived | fingerprint: ${deviceFingerprint}`);
 
-        if (!data.trusted) {
-            showFingerprintDialog(deviceFingerprint, data.device_name);
+        // ─────────────────────────────────────────────
+        // Trust Check — keyed on device name (stable),
+        // NOT the ephemeral fingerprint (changes every session)
+        // ─────────────────────────────────────────────
+        const trustKey       = `lanxfer_trusted_${data.device_name}`;
+        const alreadyTrusted = localStorage.getItem(trustKey) === 'yes';
+
+        if (alreadyTrusted || data.trusted) {
+            // Sync to localStorage in case server knew but browser didn't
+            localStorage.setItem(trustKey, 'yes');
+            updateSecurityStatus(`🔒 Trusted | ${deviceFingerprint}`, 'secure');
         } else {
-            updateSecurityStatus(`🔒 Secure | ${deviceFingerprint}`, 'secure');
+            // Genuinely first time seeing this device — show dialog
+            showFingerprintDialog(deviceFingerprint, data.device_name);
         }
 
     } catch (e) {
@@ -142,7 +152,6 @@ socket.on('key_exchange_error', (data) => {
 
 async function initKeyExchange() {
     try {
-        // Generate ephemeral P-256 keypair — matches server SECP256R1
         clientKeyPair = await crypto.subtle.generateKey(
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
@@ -188,6 +197,10 @@ function trustDevice() {
     const dialog = document.getElementById('fingerprintDialog');
     if (dialog) dialog.style.display = 'none';
 
+    // ── Persist in localStorage so page navigations never re-prompt ──
+    const trustKey = `lanxfer_trusted_${DEVICE_NAME_FROM_SERVER}`;
+    localStorage.setItem(trustKey, 'yes');
+
     fetch('/trust_device', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,7 +212,7 @@ function trustDevice() {
     })
     .then(() => {
         updateSecurityStatus(`🔒 Trusted | ${deviceFingerprint}`, 'secure');
-        console.log('[Trust] Device trusted and saved');
+        console.log('[Trust] Device trusted and saved to localStorage + server');
     })
     .catch(err => console.error('[Trust] Failed to save:', err));
 }
@@ -229,8 +242,8 @@ document.addEventListener('DOMContentLoaded', function () {
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
-    ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, highlight, false));
-    ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, unhighlight, false));
+    ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, highlight,   false));
+    ['dragleave', 'drop'].forEach(e =>     dropZone.addEventListener(e, unhighlight, false));
     dropZone.addEventListener('drop', handleDrop, false);
 
     document.querySelectorAll('th.sortable').forEach(header => {
@@ -260,6 +273,14 @@ document.addEventListener('DOMContentLoaded', function () {
     setInterval(() => {
         fetch('/heartbeat', { method: 'POST' }).catch(() => {});
     }, 30000);
+
+    // Close QR modal on backdrop click
+    const qrModal = document.getElementById('qrModal');
+    if (qrModal) {
+        qrModal.addEventListener('click', function (e) {
+            if (e.target === this) closeQRModal();
+        });
+    }
 });
 
 // ─────────────────────────────────────────────
@@ -328,7 +349,7 @@ function uploadFile() {
 
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-    // UUID without crypto.randomUUID() — works on HTTP LAN
+    // UUID fallback — works on HTTP LAN (no crypto.randomUUID required)
     const sessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
@@ -527,7 +548,6 @@ function showQRCode() {
     const urlEl   = document.getElementById('qrUrl');
     const devEl   = document.getElementById('qrDevice');
 
-    // Reset state
     img.style.display     = 'none';
     loading.style.display = 'block';
     modal.style.display   = 'flex';
@@ -535,11 +555,11 @@ function showQRCode() {
     fetch('/qr_code')
         .then(r => r.json())
         .then(data => {
-            img.src           = data.qr_image;
-            img.style.display = 'block';
+            img.src               = data.qr_image;
+            img.style.display     = 'block';
             loading.style.display = 'none';
-            urlEl.textContent = `🌐 ${data.connect_url}`;
-            devEl.textContent = `💻 ${data.device_name}`;
+            urlEl.textContent     = `🌐 ${data.connect_url}`;
+            devEl.textContent     = `💻 ${data.device_name}`;
         })
         .catch(err => {
             loading.textContent = `❌ Failed: ${err.message}`;
@@ -549,10 +569,3 @@ function showQRCode() {
 function closeQRModal() {
     document.getElementById('qrModal').style.display = 'none';
 }
-
-// Close QR modal on backdrop click
-document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('qrModal').addEventListener('click', function (e) {
-        if (e.target === this) closeQRModal();
-    });
-});

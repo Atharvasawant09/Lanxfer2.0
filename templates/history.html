@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LANxfer — Transfer History</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='history.css') }}">
+</head>
+<body>
+    <h1>LANxfer <span style="font-size:0.5em; opacity:0.6;">v2.0</span></h1>
+    <h2>📋 Transfer History</h2>
+
+    <div class="history-toolbar">
+
+        <!-- Search -->
+        <input
+            type="text"
+            id="searchInput"
+            class="history-input"
+            placeholder="🔍 Search filename..."
+            oninput="debounceLoad()"
+        >
+
+        <!-- Status Filter -->
+        <select id="statusFilter" class="history-select" onchange="loadHistory()">
+            <option value="">All Status</option>
+            <option value="complete">✅ Complete</option>
+            <option value="in_progress">⏳ In Progress</option>
+            <option value="failed">❌ Failed</option>
+        </select>
+
+        <!-- Peer Filter -->
+        <input
+            type="text"
+            id="peerFilter"
+            class="history-input"
+            placeholder="📡 Filter by peer IP..."
+            oninput="debounceLoad()"
+        >
+
+        <!-- Date Range -->
+        <input type="date" id="dateFrom" class="history-input" onchange="loadHistory()">
+        <span class="date-separator">→</span>
+        <input type="date" id="dateTo"   class="history-input" onchange="loadHistory()">
+
+        <!-- Actions -->
+        <button onclick="loadHistory()" class="btn-refresh">🔄 Refresh</button>
+        <button onclick="exportCSV()"   class="btn-export">📥 Export CSV</button>
+        <a href="/"                     class="btn-back">← Back</a>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar" id="statsBar">
+        <span id="statTotal">Total: —</span>
+        <span id="statComplete">✅ —</span>
+        <span id="statFailed">❌ —</span>
+        <span id="statInProgress">⏳ —</span>
+    </div>
+
+    <!-- Table -->
+    <div class="history-table-wrapper">
+        <table id="historyTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>File Name</th>
+                    <th>Size</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Speed</th>
+                    <th>Duration</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr><td colspan="10">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+    <script src="{{ url_for('static', filename='history.js') }}"></script>
+</body>
+</html>

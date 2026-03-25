@@ -9,6 +9,7 @@ import hashlib
 import json
 import qrcode
 import base64
+from dateutil import parser as dateparser
 from io import BytesIO
 from datetime import datetime, timedelta
 from flask import redirect
@@ -478,6 +479,185 @@ def get_transfers():
             'SELECT * FROM transfers ORDER BY started_at DESC LIMIT 100'
         ).fetchall()
     return jsonify([dict(row) for row in rows])
+
+
+@app.route('/history')
+def history_page():
+    """Render the transfer history UI page."""
+    return render_template('history.html')
+
+
+@app.route('/api/history')
+def get_history():
+    """
+    Returns paginated, filtered transfer history.
+    Query params:
+        page      int    default 1
+        per_page  int    default 20
+        status    str    'complete' | 'in_progress' | 'failed' | '' (all)
+        peer      str    IP filter
+        search    str    filename search
+        date_from str    ISO date
+        date_to   str    ISO date
+        export    str    'csv' triggers CSV download
+    """
+    try:
+        page     = max(1, int(request.args.get('page', 1)))
+        per_page = min(100, int(request.args.get('per_page', 20)))
+        status   = request.args.get('status', '').strip()
+        peer     = request.args.get('peer', '').strip()
+        search   = request.args.get('search', '').strip()
+        date_from = request.args.get('date_from', '').strip()
+        date_to   = request.args.get('date_to', '').strip()
+        export    = request.args.get('export', '').strip()
+
+        conditions = []
+        params     = []
+
+        if status:
+            conditions.append('t.status = ?')
+            params.append(status)
+        if peer:
+            conditions.append('t.sender_ip LIKE ?')
+            params.append(f'%{peer}%')
+        if search:
+            conditions.append('t.original_name LIKE ?')
+            params.append(f'%{search}%')
+        if date_from:
+            conditions.append('t.started_at >= ?')
+            params.append(date_from)
+        if date_to:
+            conditions.append('t.started_at <= ?')
+            params.append(date_to + ' 23:59:59')
+
+        where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+
+        with get_db() as conn:
+            total = conn.execute(
+                f'SELECT COUNT(*) FROM transfers t {where}', params
+            ).fetchone()[0]
+
+            rows = conn.execute(f'''
+                SELECT
+                    t.session_id,
+                    t.original_name,
+                    t.file_size,
+                    t.total_chunks,
+                    t.chunks_received,
+                    t.sender_ip,
+                    t.recipient,
+                    t.status,
+                    t.started_at,
+                    t.completed_at,
+                    CASE
+                        WHEN t.completed_at IS NOT NULL
+                        THEN ROUND(
+                            (JULIANDAY(t.completed_at) - JULIANDAY(t.started_at)) * 86400,
+                            2
+                        )
+                        ELSE NULL
+                    END AS duration_seconds
+                FROM transfers t
+                {where}
+                ORDER BY t.started_at DESC
+                LIMIT ? OFFSET ?
+            ''', params + [per_page, (page - 1) * per_page]).fetchall()
+
+        result = []
+        for r in rows:
+            chunks_done = len(json.loads(r['chunks_received'] or '[]'))
+            total_c     = r['total_chunks'] or 1
+            progress    = round((chunks_done / total_c) * 100)
+
+            result.append({
+                'session_id':      r['session_id'],
+                'original_name':   r['original_name'],
+                'file_size':       r['file_size'] or 0,
+                'file_size_fmt':   format_file_size(r['file_size'] or 0),
+                'sender_ip':       r['sender_ip'] or '—',
+                'recipient':       r['recipient'] or 'Everyone',
+                'status':          r['status'],
+                'progress':        progress,
+                'started_at':      r['started_at'],
+                'completed_at':    r['completed_at'] or '—',
+                'duration_seconds': r['duration_seconds'],
+                'duration_fmt':    f"{r['duration_seconds']:.1f}s" if r['duration_seconds'] else '—',
+                'speed_fmt':       format_file_size(
+                    int((r['file_size'] or 0) / r['duration_seconds'])
+                ) + '/s' if r['duration_seconds'] and r['duration_seconds'] > 0 else '—'
+            })
+
+        # CSV export
+        if export == 'csv':
+            import csv
+            from flask import Response
+            import io as _io
+
+            output = _io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=[
+                'session_id', 'original_name', 'file_size_fmt',
+                'sender_ip', 'recipient', 'status',
+                'progress', 'started_at', 'completed_at',
+                'duration_fmt', 'speed_fmt'
+            ])
+            writer.writeheader()
+
+            # For CSV export, fetch all matching rows (no pagination)
+            with get_db() as conn:
+                all_rows = conn.execute(f'''
+                    SELECT t.*, CASE
+                        WHEN t.completed_at IS NOT NULL
+                        THEN ROUND(
+                            (JULIANDAY(t.completed_at) - JULIANDAY(t.started_at)) * 86400, 2
+                        )
+                        ELSE NULL
+                    END AS duration_seconds
+                    FROM transfers t {where}
+                    ORDER BY t.started_at DESC
+                ''', params).fetchall()
+
+            for r in all_rows:
+                chunks_done = len(json.loads(r['chunks_received'] or '[]'))
+                total_c     = r['total_chunks'] or 1
+                writer.writerow({
+                    'session_id':    r['session_id'],
+                    'original_name': r['original_name'],
+                    'file_size_fmt': format_file_size(r['file_size'] or 0),
+                    'sender_ip':     r['sender_ip'] or '—',
+                    'recipient':     r['recipient'] or 'Everyone',
+                    'status':        r['status'],
+                    'progress':      round((chunks_done / total_c) * 100),
+                    'started_at':    r['started_at'],
+                    'completed_at':  r['completed_at'] or '—',
+                    'duration_fmt':  f"{r['duration_seconds']:.1f}s" if r['duration_seconds'] else '—',
+                    'speed_fmt':     format_file_size(
+                        int((r['file_size'] or 0) / r['duration_seconds'])
+                    ) + '/s' if r['duration_seconds'] and r['duration_seconds'] > 0 else '—'
+                })
+
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition':
+                        f'attachment; filename=lanxfer_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                }
+            )
+
+        return jsonify({
+            'transfers': result,
+            'pagination': {
+                'page':       page,
+                'per_page':   per_page,
+                'total':      total,
+                'total_pages': max(1, -(-total // per_page))  # ceiling division
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # ─────────────────────────────────────────────
 # WebSocket Handlers

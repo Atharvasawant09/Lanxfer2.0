@@ -371,3 +371,21 @@ a:hover {
     box-shadow: none;
 }
 
+
+.history-link {
+    display: inline-block;
+    margin: 5px auto 15px;
+    padding: 6px 18px;
+    border: 1px solid #33ff33;
+    color: #33ff33;
+    border-radius: 20px;
+    font-size: 0.85em;
+    text-decoration: none;
+    transition: 0.3s;
+}
+.history-link:hover {
+    background: #33ff33;
+    color: black;
+    text-shadow: none;
+}
+
