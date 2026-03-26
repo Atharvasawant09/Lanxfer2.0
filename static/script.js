@@ -803,14 +803,13 @@ async function sendClipboard() {
     }
 }
 
-// ── Incoming clipboard from server ──
 socket.on('clipboard_receive', async (data) => {
     try {
-        const { from_ip, from_device, content_type, nonce, ciphertext, preview, size_bytes } = data;
+        const { from_ip, from_device, content_type, nonce, ciphertext,
+                preview, size_bytes } = data;
 
-        // Decrypt with our session key
-        const nonceBuf = hexToBuffer(nonce);
-        const ctBuf    = new Uint8Array(ciphertext);
+        const nonceBuf  = hexToBuffer(nonce);
+        const ctBuf     = new Uint8Array(ciphertext);
 
         const plaintext = await crypto.subtle.decrypt(
             { name: 'AES-GCM', iv: nonceBuf },
@@ -818,27 +817,51 @@ socket.on('clipboard_receive', async (data) => {
             ctBuf
         );
 
-        pendingClipboard = { plaintext: new Uint8Array(plaintext), content_type };
+        const plaintextBytes = new Uint8Array(plaintext);
+        pendingClipboard     = { plaintext: plaintextBytes, content_type };
 
-        // Show toast
-        const toast    = document.getElementById('clipboardToast');
-        const icon     = document.getElementById('toastIcon');
-        const title    = document.getElementById('toastTitle');
-        const detail   = document.getElementById('toastDetail');
+        const toast     = document.getElementById('clipboardToast');
+        const icon      = document.getElementById('toastIcon');
+        const title     = document.getElementById('toastTitle');
+        const detail    = document.getElementById('toastDetail');
         const acceptBtn = document.getElementById('toastAcceptBtn');
+        const imgPrev   = document.getElementById('toastImgPreview');
 
-        icon.textContent   = content_type === 'image' ? '🖼️' : '📋';
-        title.textContent  = `Clipboard from ${from_device || from_ip}`;
-        detail.textContent = content_type === 'image'
-            ? `PNG image (${formatSize(size_bytes)})`
-            : preview || '(empty)';
-        acceptBtn.textContent = content_type === 'image' ? '✅ Copy Image' : '✅ Copy Text';
+        title.textContent = `From ${from_device || from_ip}`;
+
+        if (content_type === 'image') {
+            icon.textContent      = '🖼️';
+            acceptBtn.textContent = '✅ Copy Image';
+            detail.textContent    = `PNG image · ${formatSize(size_bytes)}`;
+            detail.style.whiteSpace = 'normal';
+
+            // Show inline preview
+            const blob = new Blob([plaintextBytes], { type: 'image/png' });
+            if (window._pendingBlobUrl) URL.revokeObjectURL(window._pendingBlobUrl);
+            window._pendingBlobUrl = URL.createObjectURL(blob);
+            imgPrev.src            = window._pendingBlobUrl;
+            imgPrev.style.display  = 'block';
+
+        } else {
+            // Full text — not the 80-char preview
+            const fullText = new TextDecoder().decode(plaintextBytes);
+            icon.textContent      = '📋';
+            acceptBtn.textContent = '✅ Copy Text';
+
+            detail.textContent    = fullText.length > 300
+                ? fullText.slice(0, 300) + '…'
+                : fullText;
+            detail.style.cssText  =
+                'color:#aaa;font-size:0.82em;max-width:260px;' +
+                'white-space:pre-wrap;word-break:break-word;' +
+                'max-height:100px;overflow-y:auto;';
+
+            if (imgPrev) imgPrev.style.display = 'none';
+        }
 
         toast.style.display = 'flex';
-
-        // Auto-dismiss after 12 seconds
         clearTimeout(window._toastTimer);
-        window._toastTimer = setTimeout(dismissToast, 12000);
+        window._toastTimer  = setTimeout(dismissToast, 15000);
 
         console.log(`[Clipboard] Received ${content_type} from ${from_device} (${size_bytes}B)`);
         fetchClipboardHistory();
@@ -848,6 +871,7 @@ socket.on('clipboard_receive', async (data) => {
         showClipboardStatus(`❌ Failed to decrypt incoming clipboard: ${err.message}`);
     }
 });
+
 
 socket.on('clipboard_sent', (data) => {
     const statusEl = document.getElementById('clipboardStatus');
@@ -893,7 +917,16 @@ function dismissToast() {
     const toast = document.getElementById('clipboardToast');
     if (toast) toast.style.display = 'none';
     clearTimeout(window._toastTimer);
+
+    // Revoke object URL to free memory
+    if (window._pendingBlobUrl) {
+        URL.revokeObjectURL(window._pendingBlobUrl);
+        window._pendingBlobUrl = null;
+    }
+    const imgPrev = document.getElementById('toastImgPreview');
+    if (imgPrev) imgPrev.style.display = 'none';
 }
+
 
 function showClipboardStatus(msg) {
     const el = document.getElementById('clipboardStatus');

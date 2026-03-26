@@ -101,17 +101,23 @@
 </div>
 
 <!-- ── Incoming Clipboard Toast ───────────────────── -->
+<!-- Replace the existing toast div entirely -->
 <div class="clipboard-toast" id="clipboardToast" style="display:none;">
     <div class="toast-icon" id="toastIcon">📋</div>
     <div class="toast-body">
         <div class="toast-title" id="toastTitle">Clipboard received</div>
         <div class="toast-detail" id="toastDetail"></div>
+        <!-- Image preview slot — hidden by default -->
+        <img id="toastImgPreview"
+             style="display:none;max-width:160px;max-height:100px;
+                    object-fit:contain;border:1px solid #00ff00;margin-top:6px;">
     </div>
     <div class="toast-actions">
         <button onclick="acceptClipboard()" id="toastAcceptBtn">✅ Apply</button>
         <button onclick="dismissToast()">✕</button>
     </div>
 </div>
+
 
 
     <table id="fileTable">
