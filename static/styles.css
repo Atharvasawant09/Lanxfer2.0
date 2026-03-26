@@ -110,7 +110,7 @@ button {
     letter-spacing: 1px;
     font-weight: bold;
     border-radius: 5px;
-    margin-top: 10px;
+    margin-top: 0px;
 }
 
 button:hover {

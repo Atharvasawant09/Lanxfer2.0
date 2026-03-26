@@ -5,85 +5,506 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LANxfer — Transfer History</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='history.css') }}">
+    <style>
+        /* ── History-specific styles ── */
+        body { padding: 24px; }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .history-header h1 { margin: 0; }
+
+        .back-btn {
+            padding: 8px 16px;
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            cursor: pointer;
+            font-family: monospace;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .back-btn:hover { background: #00ff00; color: #000; }
+
+        /* ── Filters ── */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 14px;
+            border: 1px solid #1a1a1a;
+            background: rgba(0,255,0,0.02);
+        }
+
+        .filters input,
+        .filters select {
+            padding: 7px 10px;
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #333;
+            font-family: monospace;
+            font-size: 0.85em;
+            min-width: 140px;
+        }
+
+        .filters input::placeholder { color: #444; }
+
+        .filters input:focus,
+        .filters select:focus {
+            outline: none;
+            border-color: #00ff00;
+        }
+
+        .filter-btn {
+            padding: 7px 16px;
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+
+        .filter-btn:hover { background: #00ff00; color: #000; }
+
+        .filter-btn.secondary {
+            border-color: #444;
+            color: #666;
+        }
+
+        .filter-btn.secondary:hover { background: #1a1a1a; color: #aaa; }
+
+        .export-btn {
+            padding: 7px 16px;
+            background: #000;
+            color: #00ffaa;
+            border: 1px solid #00ffaa;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 0.85em;
+            margin-left: auto;
+        }
+
+        .export-btn:hover { background: #00ffaa; color: #000; }
+
+        /* ── Stats bar ── */
+        .stats-bar {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.8em;
+        }
+
+        .stat-label { color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-value { color: #00ff00; font-size: 1.4em; font-weight: bold; }
+
+        /* ── Table ── */
+        #historyTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85em;
+        }
+
+        #historyTable th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #00ff00;
+            color: #00ff00;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+
+        #historyTable td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #111;
+            color: #ccc;
+            vertical-align: middle;
+        }
+
+        #historyTable tr:hover td { background: rgba(0,255,0,0.03); }
+
+        .status-badge {
+            padding: 2px 8px;
+            font-size: 0.8em;
+            border-radius: 2px;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+
+        .status-complete  { border: 1px solid #00ff00; color: #00ff00; }
+        .status-in_progress { border: 1px solid #ffaa00; color: #ffaa00; }
+        .status-failed    { border: 1px solid #ff4444; color: #ff4444; }
+
+        .progress-mini {
+            width: 80px;
+            height: 6px;
+            background: #1a1a1a;
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        .progress-mini-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00ffaa);
+            transition: width 0.3s;
+        }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 5px 12px;
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+
+        .page-btn:hover:not(:disabled) { border-color: #00ff00; }
+        .page-btn:disabled { color: #333; border-color: #1a1a1a; cursor: default; }
+        .page-btn.active   { background: #00ff00; color: #000; border-color: #00ff00; }
+
+        .page-info { color: #555; font-size: 0.85em; margin-left: 8px; }
+
+        /* ── Empty / Loading ── */
+        .table-message {
+            text-align: center;
+            padding: 48px;
+            color: #333;
+            font-size: 0.9em;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #1a1a1a;
+            border-top-color: #00ff00;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
-    <h1>LANxfer <span style="font-size:0.5em; opacity:0.6;">v2.0</span></h1>
-    <h2>📋 Transfer History</h2>
 
-    <div class="history-toolbar">
-
-        <!-- Search -->
-        <input
-            type="text"
-            id="searchInput"
-            class="history-input"
-            placeholder="🔍 Search filename..."
-            oninput="debounceLoad()"
-        >
-
-        <!-- Status Filter -->
-        <select id="statusFilter" class="history-select" onchange="loadHistory()">
-            <option value="">All Status</option>
-            <option value="complete">✅ Complete</option>
-            <option value="in_progress">⏳ In Progress</option>
-            <option value="failed">❌ Failed</option>
-        </select>
-
-        <!-- Peer Filter -->
-        <input
-            type="text"
-            id="peerFilter"
-            class="history-input"
-            placeholder="📡 Filter by peer IP..."
-            oninput="debounceLoad()"
-        >
-
-        <!-- Date Range -->
-        <input type="date" id="dateFrom" class="history-input" onchange="loadHistory()">
-        <span class="date-separator">→</span>
-        <input type="date" id="dateTo"   class="history-input" onchange="loadHistory()">
-
-        <!-- Actions -->
-        <button onclick="loadHistory()" class="btn-refresh">🔄 Refresh</button>
-        <button onclick="exportCSV()"   class="btn-export">📥 Export CSV</button>
-        <a href="/"                     class="btn-back">← Back</a>
+<div class="history-header">
+    <h1>📋 Transfer History</h1>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <button class="export-btn" onclick="exportCSV()">⬇️ Export CSV</button>
+        <a href="/" class="back-btn">← Back</a>
     </div>
+</div>
 
-    <!-- Stats Bar -->
-    <div class="stats-bar" id="statsBar">
-        <span id="statTotal">Total: —</span>
-        <span id="statComplete">✅ —</span>
-        <span id="statFailed">❌ —</span>
-        <span id="statInProgress">⏳ —</span>
+<!-- ── Stats Bar ── -->
+<div class="stats-bar" id="statsBar">
+    <div class="stat-item">
+        <span class="stat-label">Total</span>
+        <span class="stat-value" id="statTotal">—</span>
     </div>
-
-    <!-- Table -->
-    <div class="history-table-wrapper">
-        <table id="historyTable">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>File Name</th>
-                    <th>Size</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Status</th>
-                    <th>Progress</th>
-                    <th>Speed</th>
-                    <th>Duration</th>
-                    <th>Started</th>
-                </tr>
-            </thead>
-            <tbody id="historyBody">
-                <tr><td colspan="10">Loading...</td></tr>
-            </tbody>
-        </table>
+    <div class="stat-item">
+        <span class="stat-label">Completed</span>
+        <span class="stat-value" id="statComplete" style="color:#00ff00">—</span>
     </div>
+    <div class="stat-item">
+        <span class="stat-label">In Progress</span>
+        <span class="stat-value" id="statProgress" style="color:#ffaa00">—</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Data Transferred</span>
+        <span class="stat-value" id="statData" style="color:#00ffaa">—</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Avg Speed</span>
+        <span class="stat-value" id="statSpeed" style="color:#aaffff">—</span>
+    </div>
+</div>
 
-    <!-- Pagination -->
-    <div class="pagination" id="pagination"></div>
+<!-- ── Filters ── -->
+<div class="filters">
+    <input type="text"   id="filterSearch"   placeholder="🔍 Search filename..."  oninput="debounceSearch()">
+    <input type="text"   id="filterPeer"     placeholder="Peer IP...">
+    <select id="filterStatus">
+        <option value="">All Statuses</option>
+        <option value="complete">Complete</option>
+        <option value="in_progress">In Progress</option>
+        <option value="failed">Failed</option>
+    </select>
+    <input type="date"   id="filterDateFrom" title="From date">
+    <input type="date"   id="filterDateTo"   title="To date">
+    <button class="filter-btn"           onclick="applyFilters()">Apply</button>
+    <button class="filter-btn secondary" onclick="clearFilters()">Clear</button>
+</div>
 
-    <script src="{{ url_for('static', filename='history.js') }}"></script>
+<!-- ── Table ── -->
+<table id="historyTable">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>File Name</th>
+            <th>Size</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>Speed</th>
+            <th>Duration</th>
+            <th>Started</th>
+        </tr>
+    </thead>
+    <tbody id="historyBody">
+        <tr><td colspan="10" class="table-message">
+            <span class="loading-spinner"></span> Loading...
+        </td></tr>
+    </tbody>
+</table>
+
+<!-- ── Pagination ── -->
+<div class="pagination" id="pagination"></div>
+
+<script>
+// ── State ──
+let currentPage   = 1;
+const PER_PAGE    = 20;
+let currentFilters = {};
+let searchTimer    = null;
+let allStats       = { total: 0, complete: 0, in_progress: 0, totalBytes: 0, speeds: [] };
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+    loadHistory();
+
+    // Enter key on filters
+    document.querySelectorAll('.filters input, .filters select').forEach(el => {
+        el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+    });
+});
+
+// ── Debounced search ──
+function debounceSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 400);
+}
+
+// ── Filters ──
+function applyFilters() {
+    currentPage    = 1;
+    currentFilters = {
+        search:    document.getElementById('filterSearch').value.trim(),
+        peer:      document.getElementById('filterPeer').value.trim(),
+        status:    document.getElementById('filterStatus').value,
+        date_from: document.getElementById('filterDateFrom').value,
+        date_to:   document.getElementById('filterDateTo').value
+    };
+    loadHistory();
+}
+
+function clearFilters() {
+    document.getElementById('filterSearch').value   = '';
+    document.getElementById('filterPeer').value     = '';
+    document.getElementById('filterStatus').value   = '';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value   = '';
+    currentFilters = {};
+    currentPage    = 1;
+    loadHistory();
+}
+
+// ── Main data loader ──
+function loadHistory() {
+    const tbody = document.getElementById('historyBody');
+    tbody.innerHTML = `<tr><td colspan="10" class="table-message">
+        <span class="loading-spinner"></span> Loading...
+    </td></tr>`;
+
+    const params = new URLSearchParams({
+        page:     currentPage,
+        per_page: PER_PAGE,
+        ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
+    });
+
+    fetch(`/api/history?${params}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            renderTable(data.transfers);
+            renderPagination(data.pagination);
+            updateStats(data.transfers, data.pagination.total);
+        })
+        .catch(err => {
+            tbody.innerHTML = `<tr><td colspan="10" class="table-message" style="color:#ff4444">
+                ❌ Failed to load: ${err.message}
+            </td></tr>`;
+        });
+}
+
+// ── Render table ──
+function renderTable(transfers) {
+    const tbody = document.getElementById('historyBody');
+    tbody.innerHTML = '';
+
+    if (!transfers.length) {
+        tbody.innerHTML = `<tr><td colspan="10" class="table-message">
+            No transfers found
+        </td></tr>`;
+        return;
+    }
+
+    transfers.forEach((t, i) => {
+        const row = document.createElement('tr');
+
+        const statusClass = {
+            'complete':    'status-complete',
+            'in_progress': 'status-in_progress',
+            'failed':      'status-failed'
+        }[t.status] || 'status-complete';
+
+        const statusLabel = {
+            'complete':    '✅ Complete',
+            'in_progress': '⏳ In Progress',
+            'failed':      '❌ Failed'
+        }[t.status] || t.status;
+
+        const progressPct = t.progress || 0;
+
+        row.innerHTML = `
+            <td style="color:#555">${((currentPage - 1) * PER_PAGE) + i + 1}</td>
+            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;
+                       white-space:nowrap;" title="${escHtml(t.original_name)}">
+                ${escHtml(t.original_name)}
+            </td>
+            <td style="white-space:nowrap">${t.file_size_fmt}</td>
+            <td style="color:#aaa;font-size:0.9em">${t.sender_ip || '—'}</td>
+            <td style="color:#aaa;font-size:0.9em">${escHtml(t.recipient)}</td>
+            <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+            <td>
+                <span class="progress-mini">
+                    <span class="progress-mini-fill" style="width:${progressPct}%"></span>
+                </span>
+                <span style="font-size:0.85em;color:#666">${progressPct}%</span>
+            </td>
+            <td style="color:#00ffaa;white-space:nowrap">${t.speed_fmt}</td>
+            <td style="color:#aaa;white-space:nowrap">${t.duration_fmt}</td>
+            <td style="color:#555;font-size:0.8em;white-space:nowrap">${t.started_at}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// ── Stats ──
+function updateStats(transfers, total) {
+    // Re-fetch all pages briefly — just use visible data for approximation
+    const complete    = transfers.filter(t => t.status === 'complete').length;
+    const in_progress = transfers.filter(t => t.status === 'in_progress').length;
+    const totalBytes  = transfers.reduce((sum, t) => sum + (t.file_size || 0), 0);
+    const speeds      = transfers
+        .filter(t => t.speed_fmt && t.speed_fmt !== '—')
+        .map(t => t.speed_fmt);
+
+    document.getElementById('statTotal').textContent    = total;
+    document.getElementById('statComplete').textContent = complete;
+    document.getElementById('statProgress').textContent = in_progress;
+    document.getElementById('statData').textContent     = formatSize(totalBytes);
+    document.getElementById('statSpeed').textContent    = speeds.length
+        ? speeds[0]   // most recent transfer speed
+        : '—';
+}
+
+// ── Pagination ──
+function renderPagination(p) {
+    const container = document.getElementById('pagination');
+    container.innerHTML = '';
+
+    if (p.total_pages <= 1) return;
+
+    // Prev
+    const prev = document.createElement('button');
+    prev.className   = 'page-btn';
+    prev.textContent = '← Prev';
+    prev.disabled    = p.page <= 1;
+    prev.onclick     = () => { currentPage = p.page - 1; loadHistory(); };
+    container.appendChild(prev);
+
+    // Page numbers — show window of 5
+    const start = Math.max(1, p.page - 2);
+    const end   = Math.min(p.total_pages, start + 4);
+
+    for (let pg = start; pg <= end; pg++) {
+        const btn = document.createElement('button');
+        btn.className   = 'page-btn' + (pg === p.page ? ' active' : '');
+        btn.textContent = pg;
+        btn.onclick     = ((n) => () => { currentPage = n; loadHistory(); })(pg);
+        container.appendChild(btn);
+    }
+
+    // Next
+    const next = document.createElement('button');
+    next.className   = 'page-btn';
+    next.textContent = 'Next →';
+    next.disabled    = p.page >= p.total_pages;
+    next.onclick     = () => { currentPage = p.page + 1; loadHistory(); };
+    container.appendChild(next);
+
+    const info = document.createElement('span');
+    info.className   = 'page-info';
+    info.textContent = `Page ${p.page} of ${p.total_pages} · ${p.total} transfers`;
+    container.appendChild(info);
+}
+
+// ── CSV Export ──
+function exportCSV() {
+    const params = new URLSearchParams({
+        export: 'csv',
+        per_page: 10000,
+        ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
+    });
+    window.location.href = `/api/history?${params}`;
+}
+
+// ── Utilities ──
+function escHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatSize(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return `${bytes.toFixed(1)} ${units[i]}`;
+}
+</script>
 </body>
 </html>
