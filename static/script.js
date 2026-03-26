@@ -662,3 +662,271 @@ function showQRCode() {
 function closeQRModal() {
     document.getElementById('qrModal').style.display = 'none';
 }
+
+// ─────────────────────────────────────────────
+// Clipboard Sharing
+// ─────────────────────────────────────────────
+
+let pendingClipboard = null; // Stores decrypted incoming clipboard data
+
+// ── Sync recipient dropdown with main peer list ──
+function syncClipboardRecipients() {
+    const main   = document.getElementById('recipientSelect');
+    const cb     = document.getElementById('clipboardRecipient');
+    if (!main || !cb) return;
+
+    const current = cb.value;
+    while (cb.options.length > 1) cb.remove(1);
+
+    Array.from(main.options).slice(1).forEach(opt => {
+        const clone = document.createElement('option');
+        clone.value       = opt.value;
+        clone.textContent = opt.textContent;
+        cb.appendChild(clone);
+    });
+
+    if ([...cb.options].some(o => o.value === current)) {
+        cb.value = current;
+    }
+}
+
+// Call syncClipboardRecipients after fetchIPs resolves
+// Patch fetchIPs to also sync clipboard dropdown
+const _origFetchIPs = fetchIPs;
+window.fetchIPs = function () {
+    _origFetchIPs();
+    // Give 600ms for the dropdown to populate, then sync
+    setTimeout(syncClipboardRecipients, 600);
+};
+
+// ── Send clipboard to peer ──
+async function sendClipboard() {
+    if (!sessionKey) {
+        alert('Security handshake not complete. Please wait.');
+        return;
+    }
+
+    const statusEl   = document.getElementById('clipboardStatus');
+    const recipient  = document.getElementById('clipboardRecipient').value || 'Everyone';
+
+    statusEl.textContent = '⏳ Reading clipboard...';
+
+    try {
+        let contentType = 'text';
+        let rawBytes;
+        let preview = '';
+
+        // ── Try reading clipboard items (supports images) ──
+        let clipboardItems = null;
+        try {
+            clipboardItems = await navigator.clipboard.read();
+        } catch (e) {
+            // Fallback: text-only mode (Firefox / HTTP without permissions)
+            clipboardItems = null;
+        }
+
+        if (clipboardItems) {
+            let handled = false;
+
+            for (const item of clipboardItems) {
+                // ── Image ──
+                if (item.types.includes('image/png')) {
+                    const blob    = await item.getType('image/png');
+                    const arrBuf  = await blob.arrayBuffer();
+                    rawBytes      = new Uint8Array(arrBuf);
+                    contentType   = 'image';
+                    preview       = `PNG image (${formatSize(rawBytes.length)})`;
+                    handled       = true;
+                    break;
+                }
+                // ── Text ──
+                if (item.types.includes('text/plain')) {
+                    const blob   = await item.getType('text/plain');
+                    const text   = await blob.text();
+                    rawBytes     = new TextEncoder().encode(text);
+                    contentType  = 'text';
+                    preview      = text.slice(0, 80);
+                    handled      = true;
+                    break;
+                }
+            }
+
+            if (!handled) {
+                statusEl.textContent = '⚠️ Clipboard is empty or unsupported type';
+                return;
+            }
+
+        } else {
+            // Fallback text read
+            const text = await navigator.clipboard.readText();
+            if (!text) {
+                statusEl.textContent = '⚠️ Clipboard is empty';
+                return;
+            }
+            rawBytes    = new TextEncoder().encode(text);
+            contentType = 'text';
+            preview     = text.slice(0, 80);
+        }
+
+        statusEl.textContent = `🔒 Encrypting ${contentType}...`;
+
+        // ── AES-256-GCM encrypt ──
+        const nonce      = crypto.getRandomValues(new Uint8Array(12));
+        const ciphertext = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: nonce },
+            sessionKey,
+            rawBytes
+        );
+
+        statusEl.textContent = '📤 Sending...';
+
+        socket.emit('clipboard_send', {
+            recipient:    recipient,
+            content_type: contentType,
+            nonce:        bufferToHex(nonce),
+            ciphertext:   Array.from(new Uint8Array(ciphertext)),
+            preview:      preview,
+            size_bytes:   rawBytes.length
+        });
+
+        // Optimistic status — confirmed on clipboard_sent event
+        statusEl.textContent = `✅ Sent ${contentType} (${formatSize(rawBytes.length)}) → ${recipient}`;
+        fetchClipboardHistory();
+
+    } catch (err) {
+        console.error('[Clipboard] Send error:', err);
+        if (err.name === 'NotAllowedError') {
+            statusEl.textContent = '⚠️ Clipboard permission denied — click the page first and retry';
+        } else {
+            statusEl.textContent = `❌ Error: ${err.message}`;
+        }
+    }
+}
+
+// ── Incoming clipboard from server ──
+socket.on('clipboard_receive', async (data) => {
+    try {
+        const { from_ip, from_device, content_type, nonce, ciphertext, preview, size_bytes } = data;
+
+        // Decrypt with our session key
+        const nonceBuf = hexToBuffer(nonce);
+        const ctBuf    = new Uint8Array(ciphertext);
+
+        const plaintext = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: nonceBuf },
+            sessionKey,
+            ctBuf
+        );
+
+        pendingClipboard = { plaintext: new Uint8Array(plaintext), content_type };
+
+        // Show toast
+        const toast    = document.getElementById('clipboardToast');
+        const icon     = document.getElementById('toastIcon');
+        const title    = document.getElementById('toastTitle');
+        const detail   = document.getElementById('toastDetail');
+        const acceptBtn = document.getElementById('toastAcceptBtn');
+
+        icon.textContent   = content_type === 'image' ? '🖼️' : '📋';
+        title.textContent  = `Clipboard from ${from_device || from_ip}`;
+        detail.textContent = content_type === 'image'
+            ? `PNG image (${formatSize(size_bytes)})`
+            : preview || '(empty)';
+        acceptBtn.textContent = content_type === 'image' ? '✅ Copy Image' : '✅ Copy Text';
+
+        toast.style.display = 'flex';
+
+        // Auto-dismiss after 12 seconds
+        clearTimeout(window._toastTimer);
+        window._toastTimer = setTimeout(dismissToast, 12000);
+
+        console.log(`[Clipboard] Received ${content_type} from ${from_device} (${size_bytes}B)`);
+        fetchClipboardHistory();
+
+    } catch (err) {
+        console.error('[Clipboard] Receive/decrypt error:', err);
+        showClipboardStatus(`❌ Failed to decrypt incoming clipboard: ${err.message}`);
+    }
+});
+
+socket.on('clipboard_sent', (data) => {
+    const statusEl = document.getElementById('clipboardStatus');
+    if (statusEl) {
+        statusEl.textContent = `✅ Delivered — ${data.content_type} (${formatSize(data.size_bytes)})`;
+    }
+});
+
+socket.on('clipboard_error', (data) => {
+    const statusEl = document.getElementById('clipboardStatus');
+    if (statusEl) statusEl.textContent = `❌ ${data.reason}`;
+    console.error('[Clipboard] Server error:', data.reason);
+});
+
+// ── User clicks "Apply" on toast ──
+async function acceptClipboard() {
+    if (!pendingClipboard) return;
+
+    try {
+        const { plaintext, content_type } = pendingClipboard;
+
+        if (content_type === 'image') {
+            const blob = new Blob([plaintext], { type: 'image/png' });
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob })
+            ]);
+        } else {
+            const text = new TextDecoder().decode(plaintext);
+            await navigator.clipboard.writeText(text);
+        }
+
+        dismissToast();
+        showClipboardStatus(`✅ ${content_type === 'image' ? 'Image' : 'Text'} applied to clipboard`);
+        pendingClipboard = null;
+
+    } catch (err) {
+        console.error('[Clipboard] Write error:', err);
+        showClipboardStatus(`❌ Could not write to clipboard: ${err.message}`);
+    }
+}
+
+function dismissToast() {
+    const toast = document.getElementById('clipboardToast');
+    if (toast) toast.style.display = 'none';
+    clearTimeout(window._toastTimer);
+}
+
+function showClipboardStatus(msg) {
+    const el = document.getElementById('clipboardStatus');
+    if (el) el.textContent = msg;
+}
+
+// ── Clipboard history ──
+function fetchClipboardHistory() {
+    fetch('/clipboard/history')
+        .then(r => r.json())
+        .then(items => {
+            const list = document.getElementById('clipboardHistoryList');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!items.length) {
+                list.innerHTML = '<li style="color:#555">No clipboard activity yet</li>';
+                return;
+            }
+            items.forEach(item => {
+                const li = document.createElement('li');
+                const typeIcon = item.content_type === 'image' ? '🖼️' : '📋';
+                li.innerHTML = `
+                    <span>${typeIcon} ${escapeHtml(item.preview || '(image)')} </span>
+                    <span style="color:#555">${item.sender_ip} → ${item.recipient} | ${item.sent_at}</span>
+                `;
+                list.appendChild(li);
+            });
+        })
+        .catch(err => console.error('[Clipboard history]', err));
+}
+
+// Load history on page ready
+document.addEventListener('DOMContentLoaded', () => {
+    fetchClipboardHistory();
+});
+

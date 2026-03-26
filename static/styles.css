@@ -389,3 +389,134 @@ a:hover {
     text-shadow: none;
 }
 
+/* ── Clipboard Panel ──────────────────────── */
+.clipboard-panel {
+    border: 1px solid #00ff00;
+    padding: 16px;
+    margin: 24px 0;
+    background: rgba(0,255,0,0.03);
+}
+
+.clipboard-panel h3 {
+    margin: 0 0 12px;
+    color: #00ff00;
+}
+
+.clipboard-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.clipboard-controls select,
+.clipboard-controls button {
+    padding: 8px 14px;
+    background: #000;
+    color: #00ff00;
+    border: 1px solid #00ff00;
+    cursor: pointer;
+    font-family: monospace;
+}
+
+.clipboard-controls button:hover {
+    background: #00ff00;
+    color: #000;
+}
+
+.clipboard-status {
+    margin-top: 10px;
+    font-size: 0.85em;
+    min-height: 20px;
+    color: #00ffaa;
+}
+
+.clipboard-history {
+    margin-top: 14px;
+}
+
+.clipboard-history h4 {
+    color: #888;
+    margin: 0 0 8px;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#clipboardHistoryList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+#clipboardHistoryList li {
+    padding: 5px 0;
+    border-bottom: 1px solid #1a1a1a;
+    font-size: 0.8em;
+    color: #aaa;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* ── Toast ──────────────────────────────────── */
+.clipboard-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #111;
+    border: 1px solid #00ff00;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 9999;
+    max-width: 380px;
+    box-shadow: 0 4px 24px rgba(0,255,0,0.15);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(80px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.toast-icon { font-size: 1.8em; }
+
+.toast-title {
+    color: #00ff00;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.toast-detail {
+    color: #aaa;
+    font-size: 0.82em;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toast-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.toast-actions button {
+    padding: 5px 10px;
+    background: #000;
+    color: #00ff00;
+    border: 1px solid #00ff00;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.82em;
+}
+
+.toast-actions button:first-child:hover {
+    background: #00ff00;
+    color: #000;
+}
+

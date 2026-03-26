@@ -78,6 +78,42 @@
     </div>
 
     <h3>Available Files</h3>
+    
+<!-- ── Clipboard Panel ─────────────────────────── -->
+<div class="clipboard-panel" id="clipboardPanel">
+    <h3>📋 Clipboard Sharing</h3>
+
+    <div class="clipboard-controls">
+        <select id="clipboardRecipient">
+            <option value="Everyone">Everyone</option>
+        </select>
+        <button onclick="sendClipboard()" id="clipboardSendBtn">
+            📤 Send My Clipboard
+        </button>
+    </div>
+
+    <div class="clipboard-status" id="clipboardStatus"></div>
+
+    <div class="clipboard-history" id="clipboardHistory">
+        <h4>Recent Clipboard Activity</h4>
+        <ul id="clipboardHistoryList"></ul>
+    </div>
+</div>
+
+<!-- ── Incoming Clipboard Toast ───────────────────── -->
+<div class="clipboard-toast" id="clipboardToast" style="display:none;">
+    <div class="toast-icon" id="toastIcon">📋</div>
+    <div class="toast-body">
+        <div class="toast-title" id="toastTitle">Clipboard received</div>
+        <div class="toast-detail" id="toastDetail"></div>
+    </div>
+    <div class="toast-actions">
+        <button onclick="acceptClipboard()" id="toastAcceptBtn">✅ Apply</button>
+        <button onclick="dismissToast()">✕</button>
+    </div>
+</div>
+
+
     <table id="fileTable">
         <thead>
             <tr>

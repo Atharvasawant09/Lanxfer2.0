@@ -131,6 +131,17 @@ def init_db():
                 ip        TEXT,
                 detail    TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS clipboard_history (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_ip    TEXT    NOT NULL,
+            recipient    TEXT    NOT NULL DEFAULT 'Everyone',
+            content_type TEXT    NOT NULL DEFAULT 'text',
+            preview      TEXT,
+            size_bytes   INTEGER,
+            sent_at      TEXT    DEFAULT (datetime('now'))
+            );
+
         ''')
 
 def migrate_db():
@@ -455,6 +466,18 @@ def get_transfers():
 @app.route('/history')
 def history_page():
     return render_template('history.html')
+
+@app.route('/clipboard/history')
+def get_clipboard_history():
+    user_ip = request.remote_addr
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT * FROM clipboard_history
+            WHERE recipient = 'Everyone' OR recipient = ? OR sender_ip = ?
+            ORDER BY sent_at DESC LIMIT 50
+        ''', (user_ip, user_ip)).fetchall()
+    return jsonify([dict(row) for row in rows])
+
 
 @app.route('/api/history')
 def get_history():
@@ -867,6 +890,91 @@ def handle_chunk(data):
     except Exception as e:
         emit('chunk_error', {'chunk_index': data.get('chunk_index'), 'reason': str(e)})
         print(f"[WS] chunk error: {e}")
+
+@socketio.on('clipboard_send')
+def handle_clipboard_send(data):
+    try:
+        sender_ip    = request.remote_addr
+        sid          = request.sid
+        recipient    = data.get('recipient', 'Everyone')
+        content_type = data.get('content_type', 'text')
+        preview      = data.get('preview', '')[:80]
+        size_bytes   = data.get('size_bytes', 0)
+
+        if sid not in session_keys:
+            emit('clipboard_error', {'reason': 'key_exchange_required'})
+            return
+
+        # ── Step 1: Decrypt with sender's session key ──
+        sender_key = session_keys[sid]['key']
+        try:
+            nonce_bytes = bytes.fromhex(data['nonce'])
+            ct_bytes    = bytes(data['ciphertext'])
+            plaintext   = AESGCM(sender_key).decrypt(nonce_bytes, ct_bytes, None)
+        except Exception as e:
+            emit('clipboard_error', {'reason': f'server_decrypt_failed: {e}'})
+            print(f"[Clipboard] Sender decrypt failed: {e}")
+            return
+
+        # ── Step 2: Log metadata (plaintext never stored) ──
+        with get_db() as conn:
+            conn.execute('''
+                INSERT INTO clipboard_history
+                    (sender_ip, recipient, content_type, preview, size_bytes)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (sender_ip, recipient, content_type, preview, size_bytes))
+
+        log_event('CLIPBOARD_SEND', sender_ip,
+                  f"type={content_type} size={size_bytes} → {recipient}")
+
+        # ── Step 3: Find recipient SID(s) and re-encrypt per recipient ──
+        def reencrypt_and_forward(target_sid, target_info):
+            """Re-encrypt plaintext with the target's own session key."""
+            target_key  = target_info['key']
+            new_nonce   = os.urandom(12)
+            new_ct      = AESGCM(target_key).encrypt(new_nonce, plaintext, None)
+            payload = {
+                'from_ip':      sender_ip,
+                'from_device':  DEVICE_NAME,
+                'content_type': content_type,
+                'nonce':        new_nonce.hex(),
+                'ciphertext':   list(new_ct),
+                'size_bytes':   size_bytes,
+                'preview':      preview
+            }
+            socketio.emit('clipboard_receive', payload, to=target_sid)
+            print(f"[Clipboard] Re-encrypted {content_type} ({size_bytes}B) "
+                  f"→ {target_info['ip']} (sid={target_sid})")
+
+        sent = False
+
+        if recipient == 'Everyone':
+            for s_id, info in list(session_keys.items()):
+                if s_id != sid:
+                    reencrypt_and_forward(s_id, info)
+                    sent = True
+        else:
+            for s_id, info in list(session_keys.items()):
+                if info['ip'] == recipient and s_id != sid:
+                    reencrypt_and_forward(s_id, info)
+                    sent = True
+
+        if not sent and recipient != 'Everyone':
+            emit('clipboard_error', {
+                'reason': f'recipient {recipient} not connected'
+            })
+            return
+
+        emit('clipboard_sent', {
+            'status':       'delivered',
+            'content_type': content_type,
+            'size_bytes':   size_bytes
+        })
+
+    except Exception as e:
+        emit('clipboard_error', {'reason': str(e)})
+        print(f"[Clipboard] Error: {e}")
+
 
 def assemble_file(session_id, transfer):
     try:
