@@ -538,3 +538,44 @@ a:hover {
 }
 
 
+.delete-btn {
+    padding: 5px 10px;
+    background: #000;
+    color: #ff4444;
+    border: 1px solid #ff4444;
+    cursor: pointer;
+    font-family: monospace;
+}
+
+.delete-btn:hover {
+    background: #ff4444;
+    color: #000;
+}
+
+.delete-btn-sm {
+    padding: 2px 7px;
+    background: #000;
+    color: #ff4444;
+    border: 1px solid #ff4444;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.8em;
+    flex-shrink: 0;
+}
+
+.delete-btn-sm:hover {
+    background: #ff4444;
+    color: #000;
+}
+
+#clipboardHistoryList li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+    border-bottom: 1px solid #1a1a1a;
+    font-size: 0.8em;
+    color: #aaa;
+}
+
+

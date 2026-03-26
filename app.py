@@ -417,6 +417,54 @@ def download_file(filename):
         mimetype='application/octet-stream'
     )
 
+@app.route('/delete_file/<storage_name>', methods=['DELETE'])
+def delete_file(storage_name):
+    user_ip = request.remote_addr
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT * FROM files WHERE storage_name = ?', (storage_name,)
+        ).fetchone()
+    if not row:
+        return jsonify({'error': 'File not found'}), 404
+
+    # Only sender or server host can delete
+    if row['sender_ip'] != user_ip and user_ip != LOCAL_IP:
+        log_event('DELETE_DENIED', user_ip, storage_name)
+        return jsonify({'error': 'Permission denied'}), 403
+
+    # Remove from disk
+    file_path = os.path.join(UPLOAD_FOLDER, storage_name)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    # Remove from DB
+    with get_db() as conn:
+        conn.execute('DELETE FROM files WHERE storage_name = ?', (storage_name,))
+
+    log_event('FILE_DELETED', user_ip, storage_name)
+    return jsonify({'status': 'deleted', 'storage_name': storage_name})
+
+
+@app.route('/delete_clipboard/<int:entry_id>', methods=['DELETE'])
+def delete_clipboard(entry_id):
+    user_ip = request.remote_addr
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT * FROM clipboard_history WHERE id = ?', (entry_id,)
+        ).fetchone()
+    if not row:
+        return jsonify({'error': 'Entry not found'}), 404
+
+    if row['sender_ip'] != user_ip and user_ip != LOCAL_IP:
+        return jsonify({'error': 'Permission denied'}), 403
+
+    with get_db() as conn:
+        conn.execute('DELETE FROM clipboard_history WHERE id = ?', (entry_id,))
+
+    log_event('CLIPBOARD_DELETED', user_ip, str(entry_id))
+    return jsonify({'status': 'deleted', 'id': entry_id})
+
+
 @app.route('/trust_device', methods=['POST'])
 def trust_device():
     data        = request.json

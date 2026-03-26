@@ -963,3 +963,105 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchClipboardHistory();
 });
 
+function populateFileTable(files) {
+    const tbody = document.querySelector('#fileTable tbody');
+    tbody.innerHTML = '';
+
+    if (!Array.isArray(files) || files.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='6'>No files available</td></tr>";
+        return;
+    }
+
+    files.forEach((file, index) => {
+        const row     = document.createElement('tr');
+        row.id        = `file-row-${file.name}`;
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeHtml(file.original_name)}</td>
+            <td>${file.size_fmt}</td>
+            <td>${file.modified_fmt}</td>
+            <td>
+                <button onclick="downloadFile('${escapeHtml(file.name)}')">
+                    📥 Download
+                </button>
+            </td>
+            <td>
+                <button class="delete-btn"
+                        onclick="deleteFile('${escapeHtml(file.name)}', '${escapeHtml(file.original_name)}')">
+                    🗑️ Delete
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function deleteFile(storageName, originalName) {
+    if (!confirm(`Delete "${originalName}"?\nThis cannot be undone.`)) return;
+
+    fetch(`/delete_file/${encodeURIComponent(storageName)}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert(`❌ ${data.error}`);
+                return;
+            }
+            // Animate row out
+            const row = document.getElementById(`file-row-${storageName}`);
+            if (row) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity    = '0';
+                setTimeout(() => fetchFiles(), 300);
+            }
+        })
+        .catch(err => alert(`Delete failed: ${err.message}`));
+}
+
+
+function fetchClipboardHistory() {
+    fetch('/clipboard/history')
+        .then(r => r.json())
+        .then(items => {
+            const list = document.getElementById('clipboardHistoryList');
+            if (!list) return;
+            list.innerHTML = '';
+
+            if (!items.length) {
+                list.innerHTML = '<li style="color:#555">No clipboard activity yet</li>';
+                return;
+            }
+
+            items.forEach(item => {
+                const li       = document.createElement('li');
+                li.id          = `cb-entry-${item.id}`;
+                const typeIcon = item.content_type === 'image' ? '🖼️' : '📋';
+                li.innerHTML   = `
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        ${typeIcon} ${escapeHtml(item.preview || '(image)')}
+                    </span>
+                    <span style="color:#555;white-space:nowrap;margin:0 10px;">
+                        ${item.sender_ip} → ${item.recipient} | ${item.sent_at}
+                    </span>
+                    <button class="delete-btn-sm"
+                            onclick="deleteClipboardEntry(${item.id})">🗑️</button>
+                `;
+                list.appendChild(li);
+            });
+        })
+        .catch(err => console.error('[Clipboard history]', err));
+}
+
+function deleteClipboardEntry(id) {
+    fetch(`/delete_clipboard/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(`❌ ${data.error}`); return; }
+            const el = document.getElementById(`cb-entry-${id}`);
+            if (el) {
+                el.style.transition = 'opacity 0.3s';
+                el.style.opacity    = '0';
+                setTimeout(() => el.remove(), 300);
+            }
+        })
+        .catch(err => alert(`Delete failed: ${err.message}`));
+}
