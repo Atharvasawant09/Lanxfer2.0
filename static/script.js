@@ -2,7 +2,7 @@
 // Constants & State
 // ─────────────────────────────────────────────
 
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+const CHUNK_SIZE = 4 * 1024 * 1024;
 
 let currentSort             = { column: 'name', direction: 'asc' };
 let activeTransfers         = {};
@@ -12,18 +12,14 @@ let clientKeyPair           = null;
 let DEVICE_NAME_FROM_SERVER = '';
 
 // ─────────────────────────────────────────────
-// Socket.IO — initialized FIRST, polling forced
-// for compatibility with restricted networks
+// Socket.IO
 // ─────────────────────────────────────────────
 
 const socket = io(window.__SOCKET_OPTS || {});
 
 socket.on('connect', () => {
     console.log('[WS] Connected via', socket.io.engine.transport.name);
-    // 300ms delay — gives polling transport time to stabilize before key exchange
-    setTimeout(() => {
-        initKeyExchange();
-    }, 300);
+    setTimeout(() => initKeyExchange(), 300);
 });
 
 socket.on('disconnect', () => {
@@ -83,55 +79,41 @@ socket.on('key_exchange_reply', async (data) => {
         const salt         = hexToBuffer(data.salt);
         deviceFingerprint  = data.fingerprint;
 
-        // Import server's P-256 public key
         const serverPubKey = await crypto.subtle.importKey(
-            'raw',
-            serverPubRaw,
+            'raw', serverPubRaw,
             { name: 'ECDH', namedCurve: 'P-256' },
-            false,
-            []
+            false, []
         );
 
-        // ECDH shared bits
         const sharedBits = await crypto.subtle.deriveBits(
             { name: 'ECDH', public: serverPubKey },
-            clientKeyPair.privateKey,
-            256
+            clientKeyPair.privateKey, 256
         );
 
-        // HKDF → AES-256-GCM session key
         const hkdfKey = await crypto.subtle.importKey(
             'raw', sharedBits, 'HKDF', false, ['deriveKey']
         );
 
         sessionKey = await crypto.subtle.deriveKey(
             {
-                name: 'HKDF',
-                hash: 'SHA-256',
+                name: 'HKDF', hash: 'SHA-256',
                 salt: salt,
                 info: new TextEncoder().encode('lanxfer-v2-session')
             },
             hkdfKey,
             { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt']
+            false, ['encrypt', 'decrypt']
         );
 
         console.log(`[ECDH] Session key derived | fingerprint: ${deviceFingerprint}`);
 
-        // ─────────────────────────────────────────────
-        // Trust Check — keyed on device name (stable),
-        // NOT the ephemeral fingerprint (changes every session)
-        // ─────────────────────────────────────────────
         const trustKey       = `lanxfer_trusted_${data.device_name}`;
         const alreadyTrusted = localStorage.getItem(trustKey) === 'yes';
 
         if (alreadyTrusted || data.trusted) {
-            // Sync to localStorage in case server knew but browser didn't
             localStorage.setItem(trustKey, 'yes');
             updateSecurityStatus(`🔒 Trusted | ${deviceFingerprint}`, 'secure');
         } else {
-            // Genuinely first time seeing this device — show dialog
             showFingerprintDialog(deviceFingerprint, data.device_name);
         }
 
@@ -154,18 +136,13 @@ async function initKeyExchange() {
     try {
         clientKeyPair = await crypto.subtle.generateKey(
             { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveKey', 'deriveBits']
+            true, ['deriveKey', 'deriveBits']
         );
-
         const pubKeyRaw = await crypto.subtle.exportKey('raw', clientKeyPair.publicKey);
         const pubKeyHex = bufferToHex(pubKeyRaw);
-
         console.log('[ECDH] P-256 keypair generated, sending to server...');
         updateSecurityStatus('🔑 Performing key exchange...', 'pending');
-
         socket.emit('key_exchange', { client_public_key: pubKeyHex });
-
     } catch (e) {
         console.error('[ECDH] Key generation failed:', e);
         updateSecurityStatus('⚠️ Key generation failed: ' + e.message, 'error');
@@ -188,19 +165,16 @@ function showFingerprintDialog(fingerprint, deviceName) {
     const fpEl   = document.getElementById('fingerprintValue');
     const nameEl = document.getElementById('fingerprintDeviceName');
     if (!dialog) return;
-    fpEl.textContent     = fingerprint;
-    nameEl.textContent   = deviceName;
+    fpEl.textContent   = fingerprint;
+    nameEl.textContent = deviceName;
     dialog.style.display = 'flex';
 }
 
 function trustDevice() {
     const dialog = document.getElementById('fingerprintDialog');
     if (dialog) dialog.style.display = 'none';
-
-    // ── Persist in localStorage so page navigations never re-prompt ──
     const trustKey = `lanxfer_trusted_${DEVICE_NAME_FROM_SERVER}`;
     localStorage.setItem(trustKey, 'yes');
-
     fetch('/trust_device', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,9 +186,9 @@ function trustDevice() {
     })
     .then(() => {
         updateSecurityStatus(`🔒 Trusted | ${deviceFingerprint}`, 'secure');
-        console.log('[Trust] Device trusted and saved to localStorage + server');
+        console.log('[Trust] Device trusted and saved');
     })
-    .catch(err => console.error('[Trust] Failed to save:', err));
+    .catch(err => console.error('[Trust] Failed:', err));
 }
 
 function denyDevice() {
@@ -265,16 +239,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetchFiles();
     fetchIPs();
-
-    // Auto-refresh peer list every 10 seconds
     setInterval(fetchIPs, 10000);
-
-    // Heartbeat — keeps this device visible to other peers
     setInterval(() => {
         fetch('/heartbeat', { method: 'POST' }).catch(() => {});
     }, 30000);
 
-    // Close QR modal on backdrop click
     const qrModal = document.getElementById('qrModal');
     if (qrModal) {
         qrModal.addEventListener('click', function (e) {
@@ -317,15 +286,13 @@ async function encryptChunk(plaintext) {
     if (!sessionKey) throw new Error('No session key — key exchange incomplete');
     const nonce      = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: nonce },
-        sessionKey,
-        plaintext
+        { name: 'AES-GCM', iv: nonce }, sessionKey, plaintext
     );
     return { nonce, ciphertext: new Uint8Array(ciphertext) };
 }
 
 // ─────────────────────────────────────────────
-// Chunked Upload via WebSocket
+// Upload — Delta-aware entry point
 // ─────────────────────────────────────────────
 
 function uploadFile() {
@@ -338,26 +305,163 @@ function uploadFile() {
     const file      = fileInput.files[0];
     const recipient = recipientSelect.value || 'Everyone';
 
-    if (!file) {
-        alert('Please select a file first.');
-        return;
-    }
-    if (!sessionKey) {
-        alert('Security handshake not complete. Please wait a moment and try again.');
-        return;
-    }
+    if (!file)       { alert('Please select a file first.'); return; }
+    if (!sessionKey) { alert('Security handshake not complete. Please wait.'); return; }
 
+    progressWrapper.style.display = 'block';
+    progressText.textContent      = '⚙️ Checking...';
+    progressBar.style.width       = '0%';
+
+    console.log(`[Delta] Hashing file: ${file.name} (${file.size} bytes)`);
+
+    hashFile(file).then(fileHash => {
+        console.log(`[Delta] Hash: ${fileHash.slice(0, 16)}...`);
+
+        fetch('/delta/check', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ original_name: file.name, file_hash: fileHash })
+        })
+        .then(r => {
+            console.log(`[Delta] /delta/check HTTP ${r.status}`);
+            return r.json();
+        })
+        .then(check => {
+            console.log('[Delta] check result:', check);
+
+            if (check.match) {
+                // ── Identical file — skip entirely ──
+                progressBar.style.width  = '100%';
+                progressText.textContent = '✅ Already up to date!';
+                setTimeout(() => {
+                    progressWrapper.style.display = 'none';
+                    progressText.textContent      = '0%';
+                    progressBar.style.width       = '0%';
+                    alert(`✅ "${file.name}" is already up to date — no transfer needed!`);
+                    fetchFiles();
+                    document.getElementById('selectedFile').style.display = 'none';
+                    document.getElementById('fileInput').value            = '';
+                }, 1500);
+                return;
+            }
+
+            if (check.exists && !check.match) {
+                // ── Previous version exists — delta transfer ──
+                console.log(`[Delta] Previous version found: ${check.storage_name}`);
+                progressText.textContent = '📡 Fetching signature...';
+                attemptDeltaTransfer(
+                    file, fileHash, check.storage_name, recipient,
+                    progressBar, progressText, progressWrapper
+                );
+            } else {
+                // ── No previous version — full WebSocket transfer ──
+                console.log('[Delta] No previous version — full transfer');
+                progressText.textContent = '0%';
+                doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
+            }
+        })
+        .catch(err => {
+            console.error('[Delta] /delta/check failed:', err);
+            progressText.textContent = '0%';
+            doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
+        });
+    }).catch(err => {
+        console.error('[Delta] hashFile failed:', err);
+        progressText.textContent = '0%';
+        doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
+    });
+}
+
+// ─────────────────────────────────────────────
+// Hash entire file incrementally (no full memory load)
+// ─────────────────────────────────────────────
+
+async function hashFile(file) {
+    const CHUNK = 4 * 1024 * 1024;
+    let wordArray = CryptoJS.lib.WordArray.create([]);
+    let offset    = 0;
+    while (offset < file.size) {
+        const buf  = await file.slice(offset, offset + CHUNK).arrayBuffer();
+        wordArray  = wordArray.concat(CryptoJS.lib.WordArray.create(new Uint8Array(buf)));
+        offset    += CHUNK;
+    }
+    return CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+}
+
+// ─────────────────────────────────────────────
+// Delta Transfer — send new file via HTTP multipart
+// Server handles signature + delta computation
+// ─────────────────────────────────────────────
+
+async function attemptDeltaTransfer(file, fileHash, storageName, recipient,
+                                     progressBar, progressText, progressWrapper) {
+    try {
+        progressText.textContent = '📤 Sending delta...';
+
+        const formData = new FormData();
+        formData.append('new_file',      file);
+        formData.append('storage_name',  storageName);
+        formData.append('original_name', file.name);
+        formData.append('recipient',     recipient);
+        formData.append('file_hash',     fileHash);
+
+        await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/delta/apply');
+
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width  = `${pct}%`;
+                    progressText.textContent = `📤 ${pct}%`;
+                }
+            };
+
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const resp = JSON.parse(xhr.responseText);
+                    progressBar.style.width      = '100%';
+                    progressText.textContent     = '✅ Delta applied!';
+                    progressBar.style.background = 'linear-gradient(90deg, #00ffff, #0088ff)';
+                    setTimeout(() => {
+                        progressWrapper.style.display = 'none';
+                        progressBar.style.width       = '0%';
+                        progressBar.style.background  = 'linear-gradient(90deg, #33ff33, #00ff00)';
+                        progressText.textContent      = '0%';
+                        alert(`⚡ Delta sync complete!\n"${file.name}" updated (${resp.file_size})\nBandwidth saved: ~${resp.savings_pct}%`);
+                        fetchFiles();
+                        document.getElementById('selectedFile').style.display = 'none';
+                        document.getElementById('fileInput').value            = '';
+                    }, 1000);
+                    resolve();
+                } else {
+                    reject(new Error(`Server error ${xhr.status}: ${xhr.responseText}`));
+                }
+            };
+
+            xhr.onerror = () => reject(new Error('Network error during delta upload'));
+            xhr.send(formData);
+        });
+
+    } catch (err) {
+        console.warn(`[Delta] Failed (${err.message}) — falling back to full transfer`);
+        progressBar.style.background = 'linear-gradient(90deg, #33ff33, #00ff00)';
+        progressText.textContent     = '0%';
+        doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
+    }
+}
+
+// ─────────────────────────────────────────────
+// Full WebSocket Transfer (unchanged from Phase 2)
+// ─────────────────────────────────────────────
+
+function doFullTransfer(file, recipient, progressBar, progressText, progressWrapper) {
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-    // UUID fallback — works on HTTP LAN (no crypto.randomUUID required)
     const sessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
-
-    progressWrapper.style.display = 'block';
-    progressText.textContent      = '0%';
-    progressBar.style.width       = '0%';
 
     activeTransfers[sessionId] = { file, totalChunks, sessionId };
 
@@ -383,11 +487,8 @@ function uploadFile() {
             const arrayBuf  = await file.slice(start, end).arrayBuffer();
             const plaintext = new Uint8Array(arrayBuf);
 
-            // SHA-256 of plaintext — server verifies after GCM decrypt
             const wordArray = CryptoJS.lib.WordArray.create(plaintext);
             const hashHex   = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
-
-            // AES-256-GCM encrypt
             const { nonce, ciphertext } = await encryptChunk(plaintext);
 
             socket.emit('transfer_chunk', {
@@ -398,7 +499,6 @@ function uploadFile() {
                 chunk_hash:  hashHex
             });
 
-            // Wait for ACK before sending next chunk — flow control
             await new Promise((resolve) => {
                 socket.once('chunk_ack', () => {
                     sentCount++;
@@ -418,11 +518,9 @@ async function retryChunk(transfer, chunkIndex) {
     const end       = Math.min(start + CHUNK_SIZE, file.size);
     const arrayBuf  = await file.slice(start, end).arrayBuffer();
     const plaintext = new Uint8Array(arrayBuf);
-
     const wordArray = CryptoJS.lib.WordArray.create(plaintext);
     const hashHex   = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
     const { nonce, ciphertext } = await encryptChunk(plaintext);
-
     console.log(`[Upload] Retrying chunk ${chunkIndex}`);
     socket.emit('transfer_chunk', {
         session_id:  sessionId,
@@ -454,12 +552,10 @@ function fetchFiles() {
 function populateFileTable(files) {
     const tbody = document.querySelector('#fileTable tbody');
     tbody.innerHTML = '';
-
     if (!Array.isArray(files) || files.length === 0) {
         tbody.innerHTML = "<tr><td colspan='5'>No files available</td></tr>";
         return;
     }
-
     files.forEach((file, index) => {
         const row     = document.createElement('tr');
         row.innerHTML = `
@@ -484,7 +580,7 @@ function escapeHtml(str) {
 }
 
 // ─────────────────────────────────────────────
-// Download — server streams plaintext directly
+// Download
 // ─────────────────────────────────────────────
 
 function downloadFile(storageName) {
@@ -503,7 +599,6 @@ function downloadFile(storageName) {
 function fetchIPs() {
     const recipientSelect = document.getElementById('recipientSelect');
     const currentValue    = recipientSelect.value;
-
     fetch('/get_ips')
         .then(r => r.json())
         .then(peers => {
@@ -538,7 +633,7 @@ function hexToBuffer(hex) {
 }
 
 // ─────────────────────────────────────────────
-// QR Code Peer Pairing
+// QR Code
 // ─────────────────────────────────────────────
 
 function showQRCode() {
@@ -561,9 +656,7 @@ function showQRCode() {
             urlEl.textContent     = `🌐 ${data.connect_url}`;
             devEl.textContent     = `💻 ${data.device_name}`;
         })
-        .catch(err => {
-            loading.textContent = `❌ Failed: ${err.message}`;
-        });
+        .catch(err => { loading.textContent = `❌ Failed: ${err.message}`; });
 }
 
 function closeQRModal() {

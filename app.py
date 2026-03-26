@@ -1,18 +1,24 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response
 from flask_socketio import SocketIO, emit
 import os
+import io
 import sqlite3
 import uuid
 import threading
 import socket
 import hashlib
 import json
+import csv
 import qrcode
 import base64
-from dateutil import parser as dateparser
 from io import BytesIO
+from dateutil import parser as dateparser
 from datetime import datetime, timedelta
-from flask import redirect
+from delta import (
+    generate_signature, signature_to_bytes, signature_from_bytes,
+    compute_delta, delta_to_bytes, delta_from_bytes,
+    apply_delta, delta_stats
+)
 from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDH, generate_private_key, SECP256R1, EllipticCurvePublicKey
 )
@@ -36,7 +42,7 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     async_mode='eventlet',
     max_http_buffer_size=500 * 1024 * 1024,
-    allow_upgrades=False        # disable WS upgrade — college WiFi blocks it
+    allow_upgrades=False
 )
 
 UPLOAD_FOLDER        = 'uploads'
@@ -71,7 +77,7 @@ def get_device_fingerprint(public_key_bytes: bytes) -> str:
     return ':'.join(digest[i:i+4] for i in range(0, 32, 4))
 
 trust_store  = load_trust_store()
-session_keys = {}   # { socket_sid: { key: bytes, ip: str } }
+session_keys = {}
 
 # ─────────────────────────────────────────────
 # SQLite
@@ -128,15 +134,12 @@ def init_db():
         ''')
 
 def migrate_db():
-    """Auto-migrate schema changes — safe to run on every startup."""
     with get_db() as conn:
-        # Check if old 'encrypted_name' column exists, rename to 'storage_name'
         cols = [row[1] for row in conn.execute("PRAGMA table_info(files)").fetchall()]
         if 'encrypted_name' in cols and 'storage_name' not in cols:
             conn.execute("ALTER TABLE files RENAME COLUMN encrypted_name TO storage_name")
             print("[DB] Migrated: encrypted_name → storage_name")
         elif 'storage_name' not in cols:
-            # Table exists but is missing the column entirely — recreate
             conn.execute("DROP TABLE IF EXISTS files")
             conn.executescript('''
                 CREATE TABLE files (
@@ -153,13 +156,11 @@ def migrate_db():
             print("[DB] Recreated files table with correct schema")
 
 init_db()
-migrate_db()   # ← add this line right after init_db()
-
+migrate_db()
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
-
 
 def format_file_size(size):
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -204,12 +205,11 @@ def register_browser_peer(ip):
 def cleanup_browser_peers():
     while True:
         cutoff = datetime.now() - timedelta(seconds=PEER_TIMEOUT_SECONDS)
-        stale  = [ip for ip, info in list(browser_peers.items())  # ← list() copy
+        stale  = [ip for ip, info in list(browser_peers.items())
                   if info['last_seen'] < cutoff]
         for ip in stale:
-            browser_peers.pop(ip, None)   # ← pop instead of del (safe)
+            browser_peers.pop(ip, None)
         threading.Event().wait(60)
-
 
 threading.Thread(target=cleanup_browser_peers, daemon=True).start()
 
@@ -304,38 +304,34 @@ def heartbeat():
     register_browser_peer(request.remote_addr)
     return jsonify({'status': 'ok', 'ip': request.remote_addr})
 
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204
 
 @app.route('/qr_code')
 def get_qr_code():
-    """Generate QR code containing connection info for mobile pairing."""
-    payload = f"https://{LOCAL_IP}:5000"
-
+    connect_url = f"https://{LOCAL_IP}:5000"
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=8,
         border=4
     )
-    qr.add_data(payload)
+    qr.add_data(connect_url)
     qr.make(fit=True)
-
-    img = qr.make_image(fill_color="#00ff00", back_color="black")
-
+    img    = qr.make_image(fill_color="#00ff00", back_color="black")
     buffer = BytesIO()
     img.save(buffer, format='PNG')
     buffer.seek(0)
     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-
     log_event('QR_GENERATED', request.remote_addr)
     return jsonify({
         'qr_image':    f"data:image/png;base64,{img_b64}",
         'ip':          LOCAL_IP,
         'port':        5000,
         'device_name': DEVICE_NAME,
-        'connect_url': f"https://{LOCAL_IP}:5000"
+        'connect_url': connect_url
     })
-
-
 
 @app.route('/get_ips')
 def get_ips():
@@ -343,24 +339,13 @@ def get_ips():
     requester = request.remote_addr
     now       = datetime.now()
     result    = {}
-
     for ip, info in discovered_peers.items():
         if ip != requester:
-            result[ip] = {
-                'ip':          ip,
-                'device_name': info['device_name'],
-                'source':      'mdns'
-            }
-
+            result[ip] = {'ip': ip, 'device_name': info['device_name'], 'source': 'mdns'}
     for ip, info in browser_peers.items():
         age = (now - info['last_seen']).total_seconds()
         if ip != requester and age <= PEER_TIMEOUT_SECONDS and ip not in result:
-            result[ip] = {
-                'ip':          ip,
-                'device_name': info['device_name'],
-                'source':      'browser'
-            }
-
+            result[ip] = {'ip': ip, 'device_name': info['device_name'], 'source': 'browser'}
     return jsonify(list(result.values()))
 
 @app.route('/get_files')
@@ -378,13 +363,9 @@ def get_files():
 
         sort_by      = request.args.get('sort', 'name')
         sort_order   = request.args.get('order', 'asc')
-        sort_key_map = {
-            'name':     'original_name',
-            'size':     'size',
-            'modified': 'uploaded_at'
-        }
-        sort_key = sort_key_map.get(sort_by, 'original_name')
-        reverse  = sort_order == 'desc'
+        sort_key_map = {'name': 'original_name', 'size': 'size', 'modified': 'uploaded_at'}
+        sort_key     = sort_key_map.get(sort_by, 'original_name')
+        reverse      = sort_order == 'desc'
 
         result = []
         for f in rows:
@@ -408,18 +389,15 @@ def get_files():
 def download_file(filename):
     user_ip = request.remote_addr
     register_browser_peer(user_ip)
-
     with get_db() as conn:
         file_info = conn.execute(
             'SELECT * FROM files WHERE storage_name = ?', (filename,)
         ).fetchone()
-
     if not file_info:
         return jsonify({'error': 'File not found'}), 404
     if file_info['recipient'] != 'Everyone' and file_info['recipient'] != user_ip:
         log_event('ACCESS_DENIED', user_ip, filename)
         return jsonify({'error': 'Access denied'}), 403
-
     log_event('FILE_DOWNLOAD', user_ip, filename)
     return send_file(
         os.path.join(UPLOAD_FOLDER, filename),
@@ -434,10 +412,8 @@ def trust_device():
     ip          = data.get('ip')
     fingerprint = data.get('fingerprint')
     device_name = data.get('device_name', f"Device-{ip}")
-
     if not ip or not fingerprint:
         return jsonify({'error': 'ip and fingerprint required'}), 400
-
     trust_store[ip] = {
         'fingerprint': fingerprint,
         'device_name': device_name,
@@ -460,10 +436,6 @@ def revoke_device():
 def get_trust_store():
     return jsonify(trust_store)
 
-@app.route('/favicon.ico')
-def favicon():
-    return '', 204
-
 @app.route('/audit_log')
 def get_audit_log():
     with get_db() as conn:
@@ -480,184 +452,248 @@ def get_transfers():
         ).fetchall()
     return jsonify([dict(row) for row in rows])
 
-
 @app.route('/history')
 def history_page():
-    """Render the transfer history UI page."""
     return render_template('history.html')
-
 
 @app.route('/api/history')
 def get_history():
-    """
-    Returns paginated, filtered transfer history.
-    Query params:
-        page      int    default 1
-        per_page  int    default 20
-        status    str    'complete' | 'in_progress' | 'failed' | '' (all)
-        peer      str    IP filter
-        search    str    filename search
-        date_from str    ISO date
-        date_to   str    ISO date
-        export    str    'csv' triggers CSV download
-    """
     try:
-        page     = max(1, int(request.args.get('page', 1)))
-        per_page = min(100, int(request.args.get('per_page', 20)))
-        status   = request.args.get('status', '').strip()
-        peer     = request.args.get('peer', '').strip()
-        search   = request.args.get('search', '').strip()
+        page      = max(1, int(request.args.get('page', 1)))
+        per_page  = min(100, int(request.args.get('per_page', 20)))
+        status    = request.args.get('status', '').strip()
+        peer      = request.args.get('peer', '').strip()
+        search    = request.args.get('search', '').strip()
         date_from = request.args.get('date_from', '').strip()
         date_to   = request.args.get('date_to', '').strip()
         export    = request.args.get('export', '').strip()
 
-        conditions = []
-        params     = []
-
-        if status:
-            conditions.append('t.status = ?')
-            params.append(status)
-        if peer:
-            conditions.append('t.sender_ip LIKE ?')
-            params.append(f'%{peer}%')
-        if search:
-            conditions.append('t.original_name LIKE ?')
-            params.append(f'%{search}%')
-        if date_from:
-            conditions.append('t.started_at >= ?')
-            params.append(date_from)
-        if date_to:
-            conditions.append('t.started_at <= ?')
-            params.append(date_to + ' 23:59:59')
+        conditions, params = [], []
+        if status:    conditions.append('t.status = ?');           params.append(status)
+        if peer:      conditions.append('t.sender_ip LIKE ?');     params.append(f'%{peer}%')
+        if search:    conditions.append('t.original_name LIKE ?'); params.append(f'%{search}%')
+        if date_from: conditions.append('t.started_at >= ?');      params.append(date_from)
+        if date_to:   conditions.append('t.started_at <= ?');      params.append(date_to + ' 23:59:59')
 
         where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+
+        duration_sql = '''CASE WHEN t.completed_at IS NOT NULL
+            THEN ROUND((JULIANDAY(t.completed_at) - JULIANDAY(t.started_at)) * 86400, 2)
+            ELSE NULL END AS duration_seconds'''
 
         with get_db() as conn:
             total = conn.execute(
                 f'SELECT COUNT(*) FROM transfers t {where}', params
             ).fetchone()[0]
-
             rows = conn.execute(f'''
-                SELECT
-                    t.session_id,
-                    t.original_name,
-                    t.file_size,
-                    t.total_chunks,
-                    t.chunks_received,
-                    t.sender_ip,
-                    t.recipient,
-                    t.status,
-                    t.started_at,
-                    t.completed_at,
-                    CASE
-                        WHEN t.completed_at IS NOT NULL
-                        THEN ROUND(
-                            (JULIANDAY(t.completed_at) - JULIANDAY(t.started_at)) * 86400,
-                            2
-                        )
-                        ELSE NULL
-                    END AS duration_seconds
-                FROM transfers t
-                {where}
+                SELECT t.session_id, t.original_name, t.file_size, t.total_chunks,
+                       t.chunks_received, t.sender_ip, t.recipient, t.status,
+                       t.started_at, t.completed_at, {duration_sql}
+                FROM transfers t {where}
                 ORDER BY t.started_at DESC
                 LIMIT ? OFFSET ?
             ''', params + [per_page, (page - 1) * per_page]).fetchall()
 
-        result = []
-        for r in rows:
+        def build_row(r):
             chunks_done = len(json.loads(r['chunks_received'] or '[]'))
             total_c     = r['total_chunks'] or 1
-            progress    = round((chunks_done / total_c) * 100)
+            dur         = r['duration_seconds']
+            sz          = r['file_size'] or 0
+            return {
+                'session_id':       r['session_id'],
+                'original_name':    r['original_name'],
+                'file_size':        sz,
+                'file_size_fmt':    format_file_size(sz),
+                'sender_ip':        r['sender_ip'] or '—',
+                'recipient':        r['recipient'] or 'Everyone',
+                'status':           r['status'],
+                'progress':         round((chunks_done / total_c) * 100),
+                'started_at':       r['started_at'],
+                'completed_at':     r['completed_at'] or '—',
+                'duration_seconds': dur,
+                'duration_fmt':     f"{dur:.1f}s" if dur else '—',
+                'speed_fmt':        format_file_size(int(sz / dur)) + '/s' if dur and dur > 0 else '—'
+            }
 
-            result.append({
-                'session_id':      r['session_id'],
-                'original_name':   r['original_name'],
-                'file_size':       r['file_size'] or 0,
-                'file_size_fmt':   format_file_size(r['file_size'] or 0),
-                'sender_ip':       r['sender_ip'] or '—',
-                'recipient':       r['recipient'] or 'Everyone',
-                'status':          r['status'],
-                'progress':        progress,
-                'started_at':      r['started_at'],
-                'completed_at':    r['completed_at'] or '—',
-                'duration_seconds': r['duration_seconds'],
-                'duration_fmt':    f"{r['duration_seconds']:.1f}s" if r['duration_seconds'] else '—',
-                'speed_fmt':       format_file_size(
-                    int((r['file_size'] or 0) / r['duration_seconds'])
-                ) + '/s' if r['duration_seconds'] and r['duration_seconds'] > 0 else '—'
-            })
+        result = [build_row(r) for r in rows]
 
-        # CSV export
         if export == 'csv':
-            import csv
-            from flask import Response
-            import io as _io
-
-            output = _io.StringIO()
+            output = io.StringIO()
             writer = csv.DictWriter(output, fieldnames=[
-                'session_id', 'original_name', 'file_size_fmt',
-                'sender_ip', 'recipient', 'status',
-                'progress', 'started_at', 'completed_at',
-                'duration_fmt', 'speed_fmt'
+                'session_id', 'original_name', 'file_size_fmt', 'sender_ip',
+                'recipient', 'status', 'progress', 'started_at',
+                'completed_at', 'duration_fmt', 'speed_fmt'
             ])
             writer.writeheader()
-
-            # For CSV export, fetch all matching rows (no pagination)
             with get_db() as conn:
                 all_rows = conn.execute(f'''
-                    SELECT t.*, CASE
-                        WHEN t.completed_at IS NOT NULL
-                        THEN ROUND(
-                            (JULIANDAY(t.completed_at) - JULIANDAY(t.started_at)) * 86400, 2
-                        )
-                        ELSE NULL
-                    END AS duration_seconds
-                    FROM transfers t {where}
+                    SELECT t.*, {duration_sql} FROM transfers t {where}
                     ORDER BY t.started_at DESC
                 ''', params).fetchall()
-
             for r in all_rows:
-                chunks_done = len(json.loads(r['chunks_received'] or '[]'))
-                total_c     = r['total_chunks'] or 1
-                writer.writerow({
-                    'session_id':    r['session_id'],
-                    'original_name': r['original_name'],
-                    'file_size_fmt': format_file_size(r['file_size'] or 0),
-                    'sender_ip':     r['sender_ip'] or '—',
-                    'recipient':     r['recipient'] or 'Everyone',
-                    'status':        r['status'],
-                    'progress':      round((chunks_done / total_c) * 100),
-                    'started_at':    r['started_at'],
-                    'completed_at':  r['completed_at'] or '—',
-                    'duration_fmt':  f"{r['duration_seconds']:.1f}s" if r['duration_seconds'] else '—',
-                    'speed_fmt':     format_file_size(
-                        int((r['file_size'] or 0) / r['duration_seconds'])
-                    ) + '/s' if r['duration_seconds'] and r['duration_seconds'] > 0 else '—'
-                })
-
+                row = build_row(r)
+                writer.writerow({k: row[k] for k in writer.fieldnames})
             output.seek(0)
             return Response(
                 output.getvalue(),
                 mimetype='text/csv',
-                headers={
-                    'Content-Disposition':
-                        f'attachment; filename=lanxfer_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-                }
+                headers={'Content-Disposition':
+                    f'attachment; filename=lanxfer_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'}
             )
 
         return jsonify({
-            'transfers': result,
+            'transfers':  result,
             'pagination': {
-                'page':       page,
-                'per_page':   per_page,
-                'total':      total,
-                'total_pages': max(1, -(-total // per_page))  # ceiling division
+                'page':        page,
+                'per_page':    per_page,
+                'total':       total,
+                'total_pages': max(1, -(-total // per_page))
             }
         })
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ─────────────────────────────────────────────
+# Delta Sync Routes
+# ─────────────────────────────────────────────
+
+def find_existing_file(original_name):
+    """
+    Find most recent stored file matching original_name.
+    Searches ALL recipients — not just 'Everyone'.
+    """
+    with get_db() as conn:
+        row = conn.execute('''
+            SELECT storage_name, file_size FROM files
+            WHERE original_name = ?
+            ORDER BY uploaded_at DESC LIMIT 1
+        ''', (original_name,)).fetchone()
+    if not row:
+        return None, None
+    path = os.path.join(UPLOAD_FOLDER, row['storage_name'])
+    return (path, row['storage_name']) if os.path.exists(path) else (None, None)
+
+@app.route('/delta/check', methods=['POST'])
+def delta_check():
+    data          = request.json
+    original_name = data.get('original_name', '')
+    client_hash   = data.get('file_hash', '')
+
+    existing_path, storage_name = find_existing_file(original_name)
+    if not existing_path:
+        return jsonify({'exists': False})
+
+    sha256 = hashlib.sha256()
+    with open(existing_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            sha256.update(chunk)
+
+    if sha256.hexdigest() == client_hash:
+        return jsonify({'exists': True, 'storage_name': storage_name, 'match': True})
+
+    return jsonify({'exists': True, 'storage_name': storage_name, 'match': False})
+
+@app.route('/delta/signature/<storage_name>', methods=['GET'])
+def delta_signature(storage_name):
+    user_ip = request.remote_addr
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT * FROM files WHERE storage_name = ?', (storage_name,)
+        ).fetchone()
+    if not row:
+        return jsonify({'error': 'File not found'}), 404
+    if row['recipient'] != 'Everyone' and row['recipient'] != user_ip:
+        return jsonify({'error': 'Access denied'}), 403
+
+    file_path = os.path.join(UPLOAD_FOLDER, storage_name)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'File missing'}), 404
+
+    try:
+        sig       = generate_signature(file_path)
+        sig_bytes = signature_to_bytes(sig)
+        log_event('DELTA_SIGNATURE', user_ip, storage_name)
+        return send_file(
+            io.BytesIO(sig_bytes),          # ← io.BytesIO now works (import io at top)
+            as_attachment=True,
+            download_name='signature.sig',
+            mimetype='application/octet-stream'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/delta/apply', methods=['POST'])
+def delta_apply():
+    sender_ip     = request.remote_addr
+    new_temp_path = None
+    try:
+        storage_name  = request.form.get('storage_name')
+        original_name = request.form.get('original_name')
+        recipient     = request.form.get('recipient', 'Everyone')
+        client_hash   = request.form.get('file_hash', '')
+
+        if not storage_name or not original_name:
+            return jsonify({'error': 'storage_name and original_name required'}), 400
+
+        base_path = os.path.join(UPLOAD_FOLDER, storage_name)
+        if not os.path.exists(base_path):
+            return jsonify({'error': 'Base file not found'}), 404
+
+        if 'new_file' not in request.files:
+            return jsonify({'error': 'new_file missing'}), 400
+
+        new_file      = request.files['new_file']
+        new_temp_path = os.path.join(CHUNKS_FOLDER, f"{uuid.uuid4().hex}_new")
+        new_file.save(new_temp_path)
+
+        # Verify hash of received file
+        sha256 = hashlib.sha256()
+        with open(new_temp_path, 'rb') as f:
+            for block in iter(lambda: f.read(65536), b''):
+                sha256.update(block)
+        actual_hash = sha256.hexdigest()
+
+        if client_hash and actual_hash != client_hash:
+            return jsonify({'error': 'Hash mismatch — file corrupted in transit'}), 400
+
+        base_size    = os.path.getsize(base_path)
+        new_size     = os.path.getsize(new_temp_path)
+        sig          = generate_signature(base_path)
+        instructions = compute_delta(new_temp_path, sig)
+        stats        = delta_stats(instructions, new_size)
+
+        new_storage_name = f"{uuid.uuid4().hex}_{original_name}"
+        new_storage_path = os.path.join(UPLOAD_FOLDER, new_storage_name)
+        os.rename(new_temp_path, new_storage_path)
+        new_temp_path = None
+
+        with get_db() as conn:
+            conn.execute('''
+                INSERT INTO files
+                    (original_name, storage_name, sender_ip, recipient, file_size)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (original_name, new_storage_name, sender_ip, recipient, new_size))
+
+        log_event('DELTA_APPLY', sender_ip,
+                  f"{original_name} | saved={stats['savings_pct']}%")
+        print(f"[Delta] {original_name}: base={format_file_size(base_size)} "
+              f"new={format_file_size(new_size)} "
+              f"delta={format_file_size(stats['delta_size'])} "
+              f"saved={stats['savings_pct']}%")
+
+        return jsonify({
+            'status':       'applied',
+            'storage_name': new_storage_name,
+            'file_size':    format_file_size(new_size),
+            'delta_size':   stats['delta_size'],
+            'savings_pct':  stats['savings_pct']
+        })
+
+    except Exception as e:
+        print(f"[Delta] apply error: {e}")
+        if new_temp_path and os.path.exists(new_temp_path):
+            os.remove(new_temp_path)
+        return jsonify({'error': str(e)}), 500
 
 # ─────────────────────────────────────────────
 # WebSocket Handlers
@@ -688,25 +724,15 @@ def handle_key_exchange(data):
         client_ip        = request.remote_addr
         sid              = request.sid
 
-        # Generate ephemeral server P-256 keypair
         server_private   = generate_private_key(SECP256R1(), default_backend())
         server_public    = server_private.public_key()
         server_pub_bytes = server_public.public_bytes(
             Encoding.X962, PublicFormat.UncompressedPoint
         )
-
-        # Import client P-256 public key (65-byte uncompressed point)
-        client_public = EllipticCurvePublicKey.from_encoded_point(
-            SECP256R1(), client_pub_bytes
-        )
-
-        # ECDH shared secret
-        shared_secret = server_private.exchange(ECDH(), client_public)
-
-        # HKDF → 32-byte AES-256 session key
-        salt        = os.urandom(16)
-        session_key = derive_session_key(shared_secret, salt)
-
+        client_public  = EllipticCurvePublicKey.from_encoded_point(SECP256R1(), client_pub_bytes)
+        shared_secret  = server_private.exchange(ECDH(), client_public)
+        salt           = os.urandom(16)
+        session_key    = derive_session_key(shared_secret, salt)
         session_keys[sid] = {'key': session_key, 'ip': client_ip}
 
         fingerprint = get_device_fingerprint(client_pub_bytes)
@@ -716,7 +742,7 @@ def handle_key_exchange(data):
         )
 
         log_event('KEY_EXCHANGE', client_ip, f"fp={fingerprint} trusted={trusted}")
-        print(f"[ECDH] Session key established with {client_ip} | fp={fingerprint} | trusted={trusted}")
+        print(f"[ECDH] Key established with {client_ip} | fp={fingerprint} | trusted={trusted}")
 
         emit('key_exchange_reply', {
             'server_public_key': server_pub_bytes.hex(),
@@ -763,11 +789,9 @@ def handle_transfer_init(data):
 
             conn.execute('''
                 INSERT OR REPLACE INTO transfers
-                    (session_id, original_name, file_size,
-                     total_chunks, sender_ip, recipient)
+                    (session_id, original_name, file_size, total_chunks, sender_ip, recipient)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (session_id, original_name, file_size,
-                  total_chunks, sender_ip, recipient))
+            ''', (session_id, original_name, file_size, total_chunks, sender_ip, recipient))
 
         log_event('TRANSFER_INIT', sender_ip, f"{original_name} | {total_chunks} chunks")
         emit('transfer_ready', {
@@ -792,52 +816,35 @@ def handle_chunk(data):
         expected_hash = data['chunk_hash']
 
         if sid not in session_keys:
-            emit('chunk_error', {
-                'chunk_index': chunk_index,
-                'reason':      'no_session_key'
-            })
+            emit('chunk_error', {'chunk_index': chunk_index, 'reason': 'no_session_key'})
             return
 
         key = session_keys[sid]['key']
 
-        # AES-256-GCM decrypt
         try:
             plaintext = decrypt_chunk(key, nonce, ciphertext)
         except Exception as dec_err:
-            emit('chunk_error', {
-                'chunk_index': chunk_index,
-                'reason':      'decryption_failed'
-            })
+            emit('chunk_error', {'chunk_index': chunk_index, 'reason': 'decryption_failed'})
             print(f"[WS] GCM decryption failed chunk {chunk_index}: {dec_err}")
             return
 
-        # Verify plaintext integrity
         actual_hash = hashlib.sha256(plaintext).hexdigest()
         if actual_hash != expected_hash:
-            emit('chunk_error', {
-                'chunk_index': chunk_index,
-                'reason':      'hash_mismatch'
-            })
+            emit('chunk_error', {'chunk_index': chunk_index, 'reason': 'hash_mismatch'})
             print(f"[WS] Hash mismatch chunk {chunk_index} in {session_id}")
             return
 
-        # Write plaintext chunk to disk
         chunk_path = os.path.join(CHUNKS_FOLDER, f"{session_id}_{chunk_index}.chunk")
         with open(chunk_path, 'wb') as f:
             f.write(plaintext)
 
-        # Update DB
         with get_db() as conn:
             transfer = conn.execute(
                 'SELECT * FROM transfers WHERE session_id = ?', (session_id,)
             ).fetchone()
             if not transfer:
-                emit('chunk_error', {
-                    'chunk_index': chunk_index,
-                    'reason':      'session_not_found'
-                })
+                emit('chunk_error', {'chunk_index': chunk_index, 'reason': 'session_not_found'})
                 return
-
             received = json.loads(transfer['chunks_received'])
             if chunk_index not in received:
                 received.append(chunk_index)
@@ -858,10 +865,7 @@ def handle_chunk(data):
             assemble_file(session_id, dict(transfer))
 
     except Exception as e:
-        emit('chunk_error', {
-            'chunk_index': data.get('chunk_index'),
-            'reason':      str(e)
-        })
+        emit('chunk_error', {'chunk_index': data.get('chunk_index'), 'reason': str(e)})
         print(f"[WS] chunk error: {e}")
 
 def assemble_file(session_id, transfer):
@@ -877,7 +881,7 @@ def assemble_file(session_id, transfer):
         with open(storage_path, 'wb') as outfile:
             for i in range(total_chunks):
                 chunk_path = os.path.join(CHUNKS_FOLDER, f"{session_id}_{i}.chunk")
-                if not os.path.exists(chunk_path):           # ← ADD THIS GUARD
+                if not os.path.exists(chunk_path):
                     raise FileNotFoundError(f"Missing chunk {i} for {session_id}")
                 with open(chunk_path, 'rb') as cf:
                     outfile.write(cf.read())
@@ -909,10 +913,7 @@ def assemble_file(session_id, transfer):
 
     except Exception as e:
         print(f"[WS] assemble_file error: {e}")
-        socketio.emit('transfer_error', {
-            'session_id': session_id,
-            'reason':     str(e)
-        })
+        socketio.emit('transfer_error', {'session_id': session_id, 'reason': str(e)})
 
 # ─────────────────────────────────────────────
 # Entry Point
@@ -931,4 +932,3 @@ if __name__ == '__main__':
         certfile='cert.pem',
         keyfile='key.pem'
     )
-
