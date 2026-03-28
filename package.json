@@ -1,0 +1,56 @@
+{
+  "name": "lanxfer",
+  "version": "2.0.0",
+  "description": "Enterprise-grade offline P2P file transfer over LAN",
+  "main": "electron/main.js",
+  "scripts": {
+    "start":       "electron .",
+    "dev":         "electron . --dev",
+    "build:win":   "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "build:mac":   "electron-builder --mac"
+  },
+  "build": {
+    "appId":       "com.lanxfer.app",
+    "productName": "LANxfer",
+    "copyright":   "Copyright © 2026 LANxfer Team",
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "!backend/__pycache__",
+      "!backend/**/*.pyc",
+      "!backend/uploads/*",
+      "!backend/*.db"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to":   "backend",
+        "filter": ["**/*", "!__pycache__", "!*.pyc", "!uploads/*", "!*.db"]
+      }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon":   "electron/assets/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon":   "electron/assets/icon.png",
+      "category": "Network"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon":   "electron/assets/icon.png"
+    },
+    "nsis": {
+      "oneClick":           false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron":         "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

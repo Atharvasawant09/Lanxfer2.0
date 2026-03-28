@@ -24,6 +24,14 @@ h1, h2, h3 {
     position: relative;
 }
 
+/* Targets the upload button specifically inside the dropzone */
+#dropZone button[onclick*="upload"],
+button#uploadBtn,
+.upload-btn {
+    margin-top: 16px;
+}
+
+
 .upload-container.drag-over {
     background: rgba(51, 255, 51, 0.1);
     transform: scale(1.02);

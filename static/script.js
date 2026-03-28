@@ -39,6 +39,9 @@ socket.on('transfer_complete', (data) => {
     const progressBar     = document.querySelector('.progress-bar');
     const progressText    = document.querySelector('.progress-text');
 
+if (window.electronAPI) {
+    window.electronAPI.transferComplete(data.filename, data.peer_ip);
+}
     progressBar.style.width      = '100%';
     progressText.textContent     = 'Complete!';
     progressBar.style.background = 'linear-gradient(90deg, #33ff33, #00ffaa)';
@@ -63,6 +66,10 @@ socket.on('transfer_error', (data) => {
     alert(`Transfer failed: ${data.reason}`);
     const progressWrapper = document.querySelector('.progress-wrapper');
     if (progressWrapper) progressWrapper.style.display = 'none';
+
+    if (window.electronAPI) {
+    window.electronAPI.transferFailed(data.filename, data.peer_ip);
+}
 });
 
 socket.on('chunk_error', (data) => {

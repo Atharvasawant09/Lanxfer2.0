@@ -319,6 +319,11 @@ def heartbeat():
 def favicon():
     return '', 204
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'ok', 'version': '2.0.0'})
+
+
 @app.route('/qr_code')
 def get_qr_code():
     connect_url = f"https://{LOCAL_IP}:5000"
