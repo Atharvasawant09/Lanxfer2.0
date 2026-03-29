@@ -924,6 +924,129 @@ th.sortable.desc::after { content: '↓'; opacity: 1; color: var(--green-bright)
 }
 
 /* ══════════════════════════════
+   PEER CARDS
+   ══════════════════════════════ */
+.peer-list {
+    width: 100%;
+    margin-top: 4px;
+}
+
+.peer-list-label {
+    font-size: 0.68em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.peer-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.peer-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: rgba(0, 255, 65, 0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.peer-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--green);
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+
+.peer-card:hover {
+    border-color: var(--border-green);
+    background: rgba(0, 255, 65, 0.06);
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.06);
+}
+
+.peer-card:hover::before  { opacity: 1; }
+.peer-card:hover .peer-select-hint { opacity: 1; }
+
+.peer-card.selected {
+    border-color: var(--green);
+    background: rgba(0, 255, 65, 0.08);
+    box-shadow: 0 0 16px rgba(0, 255, 65, 0.1);
+}
+
+.peer-card.selected::before { opacity: 1; }
+
+/* Online pulse dot */
+.peer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green-bright);
+    box-shadow: 0 0 6px var(--green-glow);
+    flex-shrink: 0;
+    animation: peerOnline 2s ease-in-out infinite;
+}
+
+@keyframes peerOnline {
+    0%, 100% { box-shadow: 0 0 4px var(--green-glow);  opacity: 1; }
+    50%       { box-shadow: 0 0 10px var(--green-glow); opacity: 0.7; }
+}
+
+.peer-source-icon {
+    font-size: 1em;
+    flex-shrink: 0;
+}
+
+.peer-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+}
+
+.peer-name {
+    font-size: 0.82em;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.peer-ip {
+    font-family: var(--font-mono);
+    font-size: 0.72em;
+    color: var(--text-muted);
+}
+
+.peer-select-hint {
+    font-size: 0.68em;
+    color: var(--green);
+    opacity: 0;
+    transition: opacity var(--transition);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+    .peer-cards { gap: 5px; }
+    .peer-card  { padding: 8px 10px; }
+}
+
+/* ══════════════════════════════
    ANIMATIONS
    ══════════════════════════════ */
 @keyframes pulse {

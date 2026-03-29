@@ -643,6 +643,7 @@ function fetchIPs() {
     fetch('/get_ips')
         .then(r => r.json())
         .then(peers => {
+            // Update dropdown
             while (recipientSelect.options.length > 1) recipientSelect.remove(1);
             peers.forEach(peer => {
                 const option       = document.createElement('option');
@@ -653,9 +654,66 @@ function fetchIPs() {
             const ips = peers.map(p => p.ip);
             recipientSelect.value = ips.includes(currentValue) ? currentValue : 'Everyone';
             setTimeout(syncClipboardRecipients, 600);
+
+            // Update peer cards
+            renderPeerCards(peers);
         })
         .catch(err => console.error('[fetchIPs] Error:', err))
-        .finally(() => btn.classList.remove('scanning')); // ← moved here
+        .finally(() => btn.classList.remove('scanning'));
+}
+
+function renderPeerCards(peers) {
+    const container = document.getElementById('peerCards');
+    const wrapper   = document.getElementById('peerList');
+
+    if (!peers || peers.length === 0) {
+        wrapper.style.display = 'none';
+        return;
+    }
+
+    wrapper.style.display = 'block';
+    container.innerHTML = '';
+
+    peers.forEach(peer => {
+        const sourceIcon = {
+            'browser':  '🌐',
+            'electron': '⚡',
+            'mobile':   '📱',
+        }[peer.source] || '💻';
+
+        const card = document.createElement('div');
+        card.className   = 'peer-card';
+        card.title       = `Send to ${peer.device_name}`;
+        card.innerHTML   = `
+            <span class="peer-dot"></span>
+            <span class="peer-source-icon">${sourceIcon}</span>
+            <div class="peer-info">
+                <span class="peer-name">${escHtml(peer.device_name)}</span>
+                <span class="peer-ip">${escHtml(peer.ip)}</span>
+            </div>
+            <span class="peer-select-hint">click to select</span>
+        `;
+
+        // Clicking a card selects that peer in the dropdown
+        card.addEventListener('click', () => {
+            document.getElementById('recipientSelect').value = peer.ip;
+            document.querySelectorAll('.peer-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+        });
+
+        // Highlight if already selected
+        if (recipientSelect.value === peer.ip) {
+            card.classList.add('selected');
+        }
+
+        container.appendChild(card);
+    });
+}
+
+function escHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ─────────────────────────────────────────────

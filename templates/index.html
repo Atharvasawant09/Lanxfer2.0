@@ -93,14 +93,20 @@
                     </div>
                 </div>
 
-                <div class="send-controls">
-                    <select id="recipientSelect" class="styled-select">
-                        <option value="Everyone">Everyone</option>
-                    </select>
-                    <button onclick="fetchIPs()" id="refreshIPsButton" class="btn-icon">
-                        🔄 Refresh Peers
-                    </button>
-                </div>
+               <div class="send-controls">
+    <select id="recipientSelect" class="styled-select">
+        <option value="Everyone">Everyone</option>
+    </select>
+    <button onclick="fetchIPs()" id="refreshIPsButton" class="btn-icon">
+        🔄 Refresh Peers
+    </button>
+</div>
+
+<!-- Peer Cards — shown below the dropdown -->
+<div class="peer-list" id="peerList" style="display:none;">
+    <div class="peer-list-label">Active Peers</div>
+    <div class="peer-cards" id="peerCards"></div>
+</div>
 
                 <div class="action-row">
                     <button type="button" onclick="showQRCode()" id="qrButton" class="btn-secondary">
