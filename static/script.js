@@ -635,8 +635,11 @@ function downloadFile(storageName) {
 // ─────────────────────────────────────────────
 
 function fetchIPs() {
+    const btn = document.getElementById('refreshIPsButton');
+    btn.classList.add('scanning');
     const recipientSelect = document.getElementById('recipientSelect');
     const currentValue    = recipientSelect.value;
+
     fetch('/get_ips')
         .then(r => r.json())
         .then(peers => {
@@ -651,7 +654,8 @@ function fetchIPs() {
             recipientSelect.value = ips.includes(currentValue) ? currentValue : 'Everyone';
             setTimeout(syncClipboardRecipients, 600);
         })
-        .catch(err => console.error('[fetchIPs] Error:', err));
+        .catch(err => console.error('[fetchIPs] Error:', err))
+        .finally(() => btn.classList.remove('scanning')); // ← moved here
 }
 
 // ─────────────────────────────────────────────
