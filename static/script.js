@@ -558,7 +558,31 @@ function fetchFiles() {
                 `<tr><td colspan="6">Error loading files: ${err.message}</td></tr>`;
         });
 }
-
+function getFileIcon(filename) {
+    const ext = String(filename).split('.').pop().toLowerCase();
+    const icons = {
+        // Images
+        jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️', bmp: '🖼️', ico: '🖼️',
+        // Documents
+        pdf: '📄', doc: '📝', docx: '📝', txt: '📃', md: '📃', rtf: '📝', odt: '📝',
+        // Spreadsheets
+        xls: '📊', xlsx: '📊', csv: '📊', ods: '📊',
+        // Presentations
+        ppt: '📑', pptx: '📑', odp: '📑',
+        // Video
+        mp4: '🎬', mkv: '🎬', avi: '🎬', mov: '🎬', webm: '🎬', flv: '🎬',
+        // Audio
+        mp3: '🎵', wav: '🎵', flac: '🎵', ogg: '🎵', aac: '🎵', m4a: '🎵',
+        // Archives
+        zip: '🗜️', rar: '🗜️', '7z': '🗜️', tar: '🗜️', gz: '🗜️', xz: '🗜️',
+        // Code
+        js: '⚙️', ts: '⚙️', py: '⚙️', html: '⚙️', css: '⚙️',
+        json: '⚙️', xml: '⚙️', sh: '⚙️', bat: '⚙️', cpp: '⚙️', c: '⚙️', java: '⚙️',
+        // Executables
+        exe: '⚡', msi: '⚡', apk: '⚡', dmg: '⚡',
+    };
+    return icons[ext] || '📦';
+}
 function populateFileTable(files) {
     const tbody = document.querySelector('#fileTable tbody');
     tbody.innerHTML = '';
@@ -575,7 +599,9 @@ function populateFileTable(files) {
         row.id     = `file-row-${file.name}`;
         row.innerHTML = `
             <td>${index + 1}</td>
-            <td>${escapeHtml(file.original_name)}</td>
+            <td>
+                <span style="margin-right:6px">${getFileIcon(file.original_name)}</span>${escapeHtml(file.original_name)}
+            </td>
             <td>${file.size_fmt}</td>
             <td>${file.modified_fmt}</td>
             <td>
