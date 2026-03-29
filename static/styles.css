@@ -910,3 +910,164 @@ th.sortable.desc::after { content: '↓'; opacity: 1; color: var(--green-bright)
     50%       { opacity: 0.4; }
 }
 
+
+/* ══════════════════════════════
+   MOBILE RESPONSIVE
+   ══════════════════════════════ */
+
+/* ── Tablet (≤900px) ── */
+@media (max-width: 900px) {
+    .dashboard {
+        grid-template-columns: 1fr;
+        padding: 16px;
+        gap: 16px;
+    }
+
+    .files-section {
+        padding: 0 16px;
+    }
+
+    .nav-bar {
+        padding: 10px 16px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .nav-actions {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .security-status {
+        font-size: 0.68em;
+        padding: 4px 10px;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+/* ── Mobile (≤600px) ── */
+@media (max-width: 600px) {
+
+    /* Nav */
+    .nav-bar {
+        padding: 10px 14px;
+        gap: 6px;
+    }
+
+    .nav-title  { font-size: 0.95em; }
+    .nav-logo   { font-size: 0.95em; }
+
+    .nav-version {
+        display: none; /* hide v2.0 badge on tiny screens */
+    }
+
+    .nav-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .security-status {
+        font-size: 0.65em;
+        max-width: 200px;
+        padding: 3px 8px;
+    }
+
+    a.nav-btn {
+        font-size: 0.76em;
+        padding: 5px 10px;
+    }
+
+    /* Dashboard */
+    .dashboard {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .panel { padding: 16px; }
+
+    /* Upload zone */
+    .upload-icon-wrap { padding: 16px; }
+    .upload-icon      { font-size: 2.2em; }
+    .upload-hint      { font-size: 0.82em; }
+
+    /* Send controls */
+    .send-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .send-controls .styled-select { width: 100%; }
+    .send-controls .btn-icon      { width: 100%; justify-content: center; }
+
+    .action-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .action-row button { width: 100%; }
+
+    /* Clipboard controls */
+    .clipboard-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .clipboard-controls .styled-select { width: 100%; }
+    .clipboard-controls .btn-primary   { width: 100%; justify-content: center; }
+
+    /* Files table — horizontal scroll on mobile */
+    .files-section { padding: 0 12px; }
+
+    .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table { min-width: 560px; }
+
+    th, td { padding: 9px 10px; font-size: 0.78em; }
+
+    td:nth-child(2) { font-size: 0.76em; }
+
+    /* Hide less important columns on very small screens */
+    th:nth-child(4), td:nth-child(4) { display: none; } /* Hide "Uploaded" date */
+
+    /* Section title */
+    .section-title { font-size: 0.8em; }
+
+    /* Toast */
+    .clipboard-toast {
+        bottom: 12px;
+        right: 12px;
+        left: 12px;
+        max-width: none;
+        width: auto;
+    }
+
+    /* QR modal */
+    .dialog-box   { padding: 22px 18px; }
+    .qr-container { padding: 12px; }
+    .qr-image     { width: 160px; height: 160px; }
+
+    /* Command palette */
+    .cmd-box    { width: 95vw; }
+    .cmd-hint   { gap: 8px; font-size: 0.68em; }
+}
+
+/* ── Very small phones (≤380px) ── */
+@media (max-width: 380px) {
+    .nav-bar { padding: 8px 10px; }
+
+    .security-status { display: none; } /* too cramped — hide entirely */
+
+    .panel { padding: 12px; }
+
+    table  { min-width: 480px; }
+
+    /* Stack fingerprint dialog buttons */
+    .dialog-buttons { flex-direction: column; }
+}
