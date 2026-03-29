@@ -4,209 +4,275 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LANxfer — Transfer History</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        /* ── History-specific styles ── */
-        body { padding: 24px; }
+        /* ── History page overrides — inherits full design system ── */
 
-        .history-header {
+        .history-hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 32px 0;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            justify-content: space-between;
             flex-wrap: wrap;
             gap: 12px;
         }
 
-        .history-header h1 { margin: 0; }
-
-        .back-btn {
-            padding: 8px 16px;
-            background: #000;
-            color: #00ff00;
-            border: 1px solid #00ff00;
-            cursor: pointer;
-            font-family: monospace;
-            text-decoration: none;
-            font-size: 0.9em;
+        .history-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .back-btn:hover { background: #00ff00; color: #000; }
+        .history-title h1 {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.02em;
+        }
 
-        /* ── Filters ── */
-        .filters {
+        .history-title span {
+            font-size: 1.6em;
+            filter: drop-shadow(0 0 8px rgba(0,255,65,0.4));
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* ── Stats row ── */
+        .stats-row {
+            max-width: 1200px;
+            margin: 20px auto 0;
+            padding: 0 32px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            backdrop-filter: blur(20px);
+            transition: border-color var(--transition);
+        }
+
+        .stat-card:hover { border-color: var(--border-green); }
+
+        .stat-label {
+            font-size: 0.68em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 1.5em;
+            font-weight: 700;
+            color: var(--green-bright);
+            text-shadow: 0 0 10px rgba(0,255,65,0.3);
+        }
+
+        .stat-value.amber { color: var(--amber); text-shadow: 0 0 10px rgba(227,179,65,0.3); }
+        .stat-value.cyan  { color: var(--cyan);  text-shadow: 0 0 10px rgba(121,192,255,0.3); }
+        .stat-value.blue  { color: var(--blue);  text-shadow: 0 0 10px rgba(56,139,253,0.3); }
+
+        /* ── Filters panel ── */
+        .filters-panel {
+            max-width: 1200px;
+            margin: 16px auto 0;
+            padding: 0 32px;
+        }
+
+        .filters-inner {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-bottom: 20px;
-            padding: 14px;
-            border: 1px solid #1a1a1a;
-            background: rgba(0,255,0,0.02);
+            align-items: center;
+            backdrop-filter: blur(20px);
         }
 
-        .filters input,
-        .filters select {
-            padding: 7px 10px;
-            background: #000;
-            color: #00ff00;
-            border: 1px solid #333;
-            font-family: monospace;
-            font-size: 0.85em;
+        .filter-input {
+            background: rgba(5, 5, 7, 0.85);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-ui);
+            font-size: 0.82em;
             min-width: 140px;
+            transition: var(--transition);
         }
 
-        .filters input::placeholder { color: #444; }
+        .filter-input::placeholder { color: var(--text-muted); }
 
-        .filters input:focus,
-        .filters select:focus {
+        .filter-input:focus {
             outline: none;
-            border-color: #00ff00;
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(0,255,65,0.12);
         }
 
-        .filter-btn {
-            padding: 7px 16px;
-            background: #000;
-            color: #00ff00;
-            border: 1px solid #00ff00;
+        .filter-select {
+            background: rgba(5, 5, 7, 0.85);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 28px 8px 12px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-ui);
+            font-size: 0.82em;
+            min-width: 140px;
             cursor: pointer;
-            font-family: monospace;
-            font-size: 0.85em;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b949e'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            transition: var(--transition);
         }
 
-        .filter-btn:hover { background: #00ff00; color: #000; }
-
-        .filter-btn.secondary {
-            border-color: #444;
-            color: #666;
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(0,255,65,0.12);
         }
 
-        .filter-btn.secondary:hover { background: #1a1a1a; color: #aaa; }
+        .filter-select option { background: var(--bg-surface); }
 
-        .export-btn {
-            padding: 7px 16px;
-            background: #000;
-            color: #00ffaa;
-            border: 1px solid #00ffaa;
-            cursor: pointer;
-            font-family: monospace;
-            font-size: 0.85em;
-            margin-left: auto;
+        .filter-actions { margin-left: auto; display: flex; gap: 8px; }
+
+        /* ── History table section ── */
+        .history-section {
+            max-width: 1200px;
+            margin: 16px auto 32px;
+            padding: 0 32px;
         }
 
-        .export-btn:hover { background: #00ffaa; color: #000; }
-
-        /* ── Stats bar ── */
-        .stats-bar {
-            display: flex;
-            gap: 24px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-            font-size: 0.8em;
-        }
-
-        .stat-label { color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
-        .stat-value { color: #00ff00; font-size: 1.4em; font-weight: bold; }
-
-        /* ── Table ── */
-        #historyTable {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85em;
-        }
-
-        #historyTable th {
-            text-align: left;
-            padding: 10px 12px;
-            border-bottom: 1px solid #00ff00;
-            color: #00ff00;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-size: 0.8em;
-            white-space: nowrap;
-        }
-
-        #historyTable td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #111;
-            color: #ccc;
-            vertical-align: middle;
-        }
-
-        #historyTable tr:hover td { background: rgba(0,255,0,0.03); }
-
+        /* ── Status badges ── */
         .status-badge {
-            padding: 2px 8px;
-            font-size: 0.8em;
-            border-radius: 2px;
-            font-family: monospace;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: 600;
+            font-family: var(--font-mono);
             white-space: nowrap;
         }
 
-        .status-complete  { border: 1px solid #00ff00; color: #00ff00; }
-        .status-in_progress { border: 1px solid #ffaa00; color: #ffaa00; }
-        .status-failed    { border: 1px solid #ff4444; color: #ff4444; }
+        .status-complete    { border: 1px solid rgba(0,200,83,0.5);   color: var(--green);  background: rgba(0,200,83,0.08); }
+        .status-in_progress { border: 1px solid rgba(227,179,65,0.5); color: var(--amber);  background: rgba(227,179,65,0.08); }
+        .status-failed      { border: 1px solid rgba(248,81,73,0.5);  color: var(--red);    background: rgba(248,81,73,0.08); }
 
+        /* ── Mini progress bar ── */
         .progress-mini {
-            width: 80px;
-            height: 6px;
-            background: #1a1a1a;
-            border-radius: 3px;
+            width: 70px;
+            height: 5px;
+            background: rgba(0,255,65,0.08);
+            border-radius: 10px;
             overflow: hidden;
             display: inline-block;
             vertical-align: middle;
-            margin-right: 6px;
+            margin-right: 5px;
         }
 
         .progress-mini-fill {
             height: 100%;
-            background: linear-gradient(90deg, #00ff00, #00ffaa);
+            background: linear-gradient(90deg, var(--green), var(--green-bright));
+            border-radius: 10px;
             transition: width 0.3s;
+        }
+
+        .progress-mini-fill.amber { background: linear-gradient(90deg, #c87800, var(--amber)); }
+        .progress-mini-fill.red   { background: linear-gradient(90deg, #a00, var(--red)); }
+
+        /* ── Speed highlight ── */
+        .speed-value {
+            font-family: var(--font-mono);
+            font-size: 0.82em;
+            color: var(--cyan);
+            white-space: nowrap;
         }
 
         /* ── Pagination ── */
         .pagination {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             margin-top: 20px;
             flex-wrap: wrap;
+            justify-content: center;
         }
 
         .page-btn {
-            padding: 5px 12px;
-            background: #000;
-            color: #00ff00;
-            border: 1px solid #333;
+            padding: 5px 11px;
+            font-size: 0.78em;
+            font-family: var(--font-mono);
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-family: monospace;
-            font-size: 0.85em;
+            transition: var(--transition);
+            text-transform: none;
+            letter-spacing: 0;
+            min-width: 34px;
         }
 
-        .page-btn:hover:not(:disabled) { border-color: #00ff00; }
-        .page-btn:disabled { color: #333; border-color: #1a1a1a; cursor: default; }
-        .page-btn.active   { background: #00ff00; color: #000; border-color: #00ff00; }
+        .page-btn:hover:not(:disabled) {
+            color: var(--green-bright);
+            border-color: var(--border-green);
+            background: var(--bg-hover);
+        }
 
-        .page-info { color: #555; font-size: 0.85em; margin-left: 8px; }
+        .page-btn:disabled { opacity: 0.3; cursor: default; }
+        .page-btn.active   {
+            background: rgba(0,255,65,0.15);
+            color: var(--green-bright);
+            border-color: var(--border-green);
+            box-shadow: 0 0 8px rgba(0,255,65,0.15);
+        }
 
-        /* ── Empty / Loading ── */
+        .page-info {
+            font-size: 0.78em;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            margin-left: 8px;
+        }
+
+        /* ── Table message states ── */
         .table-message {
             text-align: center;
-            padding: 48px;
-            color: #333;
-            font-size: 0.9em;
+            padding: 40px !important;
+            color: var(--text-muted);
+            font-size: 0.88em;
+            font-family: var(--font-mono);
         }
+
+        .table-error { color: var(--red) !important; }
 
         .loading-spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #1a1a1a;
-            border-top-color: #00ff00;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--green-bright);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             vertical-align: middle;
@@ -214,297 +280,325 @@
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Row states ── */
+        .row-in_progress td { background: rgba(227,179,65,0.02); }
+        .row-failed td      { background: rgba(248,81,73,0.02); }
+
+        /* ── Mobile ── */
+        @media (max-width: 900px) {
+            .stats-row { grid-template-columns: repeat(3, 1fr); }
+            .history-hero, .filters-panel, .history-section { padding: 0 16px; }
+            .history-hero { padding-top: 16px; }
+        }
+
+        @media (max-width: 600px) {
+            .stats-row { grid-template-columns: repeat(2, 1fr); padding: 0 12px; }
+            .history-hero { padding: 12px; }
+            .filters-panel, .history-section { padding: 0 12px; }
+            .history-actions { width: 100%; justify-content: flex-end; }
+            .filter-actions  { margin-left: 0; width: 100%; }
+            .filter-actions button { flex: 1; }
+            th:nth-child(8), td:nth-child(8),
+            th:nth-child(9), td:nth-child(9) { display: none; }
+        }
     </style>
 </head>
 <body>
 
-<div class="history-header">
-    <h1>📋 Transfer History</h1>
-    <div style="display:flex;gap:10px;align-items:center;">
-        <button class="export-btn" onclick="exportCSV()">⬇️ Export CSV</button>
-        <a href="/" class="back-btn">← Back</a>
+    <!-- ── Nav Bar (same as main) ── -->
+    <nav class="nav-bar">
+        <div class="nav-brand">
+            <span class="nav-logo">⟨LX⟩</span>
+            <span class="nav-title">LANxfer</span>
+            <span class="nav-version">v2.0</span>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="nav-btn">← Dashboard</a>
+        </div>
+    </nav>
+
+    <!-- ── Page Title ── -->
+    <div class="history-hero">
+        <div class="history-title">
+            <span>📋</span>
+            <h1>Transfer History</h1>
+        </div>
+        <div class="history-actions">
+            <button class="btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+            <a href="/" class="btn-outline" style="padding:9px 18px;font-size:0.82em;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary);">← Back</a>
+        </div>
     </div>
-</div>
 
-<!-- ── Stats Bar ── -->
-<div class="stats-bar" id="statsBar">
-    <div class="stat-item">
-        <span class="stat-label">Total</span>
-        <span class="stat-value" id="statTotal">—</span>
+    <!-- ── Stats Cards ── -->
+    <div class="stats-row" id="statsRow">
+        <div class="stat-card">
+            <span class="stat-label">Total</span>
+            <span class="stat-value" id="statTotal">—</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Completed</span>
+            <span class="stat-value" id="statComplete">—</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">In Progress</span>
+            <span class="stat-value amber" id="statProgress">—</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Data Transferred</span>
+            <span class="stat-value cyan" id="statData">—</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Avg Speed</span>
+            <span class="stat-value blue" id="statSpeed">—</span>
+        </div>
     </div>
-    <div class="stat-item">
-        <span class="stat-label">Completed</span>
-        <span class="stat-value" id="statComplete" style="color:#00ff00">—</span>
+
+    <!-- ── Filters ── -->
+    <div class="filters-panel">
+        <div class="filters-inner">
+            <input type="text" id="filterSearch" class="filter-input"
+                   placeholder="🔍 Search filename..." oninput="debounceSearch()">
+            <input type="text" id="filterPeer" class="filter-input"
+                   placeholder="Peer IP...">
+            <select id="filterStatus" class="filter-select">
+                <option value="">All Statuses</option>
+                <option value="complete">Complete</option>
+                <option value="in_progress">In Progress</option>
+                <option value="failed">Failed</option>
+            </select>
+            <input type="date" id="filterDateFrom" class="filter-input" title="From date">
+            <input type="date" id="filterDateTo"   class="filter-input" title="To date">
+            <div class="filter-actions">
+                <button class="btn-primary"  onclick="applyFilters()">Apply</button>
+                <button class="btn-outline"  onclick="clearFilters()">Clear</button>
+            </div>
+        </div>
     </div>
-    <div class="stat-item">
-        <span class="stat-label">In Progress</span>
-        <span class="stat-value" id="statProgress" style="color:#ffaa00">—</span>
-    </div>
-    <div class="stat-item">
-        <span class="stat-label">Data Transferred</span>
-        <span class="stat-value" id="statData" style="color:#00ffaa">—</span>
-    </div>
-    <div class="stat-item">
-        <span class="stat-label">Avg Speed</span>
-        <span class="stat-value" id="statSpeed" style="color:#aaffff">—</span>
-    </div>
-</div>
 
-<!-- ── Filters ── -->
-<div class="filters">
-    <input type="text"   id="filterSearch"   placeholder="🔍 Search filename..."  oninput="debounceSearch()">
-    <input type="text"   id="filterPeer"     placeholder="Peer IP...">
-    <select id="filterStatus">
-        <option value="">All Statuses</option>
-        <option value="complete">Complete</option>
-        <option value="in_progress">In Progress</option>
-        <option value="failed">Failed</option>
-    </select>
-    <input type="date"   id="filterDateFrom" title="From date">
-    <input type="date"   id="filterDateTo"   title="To date">
-    <button class="filter-btn"           onclick="applyFilters()">Apply</button>
-    <button class="filter-btn secondary" onclick="clearFilters()">Clear</button>
-</div>
+    <!-- ── History Table ── -->
+    <section class="history-section">
+        <div class="table-wrap">
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>File Name</th>
+                        <th>Size</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Speed</th>
+                        <th>Duration</th>
+                        <th>Started</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="10" class="table-message">
+                        <span class="loading-spinner"></span> Loading transfers...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
 
-<!-- ── Table ── -->
-<table id="historyTable">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>File Name</th>
-            <th>Size</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>Speed</th>
-            <th>Duration</th>
-            <th>Started</th>
-        </tr>
-    </thead>
-    <tbody id="historyBody">
-        <tr><td colspan="10" class="table-message">
-            <span class="loading-spinner"></span> Loading...
-        </td></tr>
-    </tbody>
-</table>
+        <div class="pagination" id="pagination"></div>
+    </section>
 
-<!-- ── Pagination ── -->
-<div class="pagination" id="pagination"></div>
+    <script>
+        let currentPage    = 1;
+        const PER_PAGE     = 20;
+        let currentFilters = {};
+        let searchTimer    = null;
 
-<script>
-// ── State ──
-let currentPage   = 1;
-const PER_PAGE    = 20;
-let currentFilters = {};
-let searchTimer    = null;
-let allStats       = { total: 0, complete: 0, in_progress: 0, totalBytes: 0, speeds: [] };
-
-// ── Init ──
-document.addEventListener('DOMContentLoaded', () => {
-    loadHistory();
-
-    // Enter key on filters
-    document.querySelectorAll('.filters input, .filters select').forEach(el => {
-        el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
-    });
-});
-
-// ── Debounced search ──
-function debounceSearch() {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(applyFilters, 400);
-}
-
-// ── Filters ──
-function applyFilters() {
-    currentPage    = 1;
-    currentFilters = {
-        search:    document.getElementById('filterSearch').value.trim(),
-        peer:      document.getElementById('filterPeer').value.trim(),
-        status:    document.getElementById('filterStatus').value,
-        date_from: document.getElementById('filterDateFrom').value,
-        date_to:   document.getElementById('filterDateTo').value
-    };
-    loadHistory();
-}
-
-function clearFilters() {
-    document.getElementById('filterSearch').value   = '';
-    document.getElementById('filterPeer').value     = '';
-    document.getElementById('filterStatus').value   = '';
-    document.getElementById('filterDateFrom').value = '';
-    document.getElementById('filterDateTo').value   = '';
-    currentFilters = {};
-    currentPage    = 1;
-    loadHistory();
-}
-
-// ── Main data loader ──
-function loadHistory() {
-    const tbody = document.getElementById('historyBody');
-    tbody.innerHTML = `<tr><td colspan="10" class="table-message">
-        <span class="loading-spinner"></span> Loading...
-    </td></tr>`;
-
-    const params = new URLSearchParams({
-        page:     currentPage,
-        per_page: PER_PAGE,
-        ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
-    });
-
-    fetch(`/api/history?${params}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) throw new Error(data.error);
-            renderTable(data.transfers);
-            renderPagination(data.pagination);
-            updateStats(data.transfers, data.pagination.total);
-        })
-        .catch(err => {
-            tbody.innerHTML = `<tr><td colspan="10" class="table-message" style="color:#ff4444">
-                ❌ Failed to load: ${err.message}
-            </td></tr>`;
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+            document.querySelectorAll('.filter-input, .filter-select').forEach(el => {
+                el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+            });
         });
-}
 
-// ── Render table ──
-function renderTable(transfers) {
-    const tbody = document.getElementById('historyBody');
-    tbody.innerHTML = '';
+        function debounceSearch() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(applyFilters, 400);
+        }
 
-    if (!transfers.length) {
-        tbody.innerHTML = `<tr><td colspan="10" class="table-message">
-            No transfers found
-        </td></tr>`;
-        return;
-    }
+        function applyFilters() {
+            currentPage    = 1;
+            currentFilters = {
+                search:    document.getElementById('filterSearch').value.trim(),
+                peer:      document.getElementById('filterPeer').value.trim(),
+                status:    document.getElementById('filterStatus').value,
+                date_from: document.getElementById('filterDateFrom').value,
+                date_to:   document.getElementById('filterDateTo').value
+            };
+            loadHistory();
+        }
 
-    transfers.forEach((t, i) => {
-        const row = document.createElement('tr');
+        function clearFilters() {
+            ['filterSearch','filterPeer','filterDateFrom','filterDateTo'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('filterStatus').value = '';
+            currentFilters = {};
+            currentPage    = 1;
+            loadHistory();
+        }
 
-        const statusClass = {
-            'complete':    'status-complete',
-            'in_progress': 'status-in_progress',
-            'failed':      'status-failed'
-        }[t.status] || 'status-complete';
+        function loadHistory() {
+            const tbody = document.getElementById('historyBody');
+            tbody.innerHTML = `<tr><td colspan="10" class="table-message">
+                <span class="loading-spinner"></span> Loading transfers...
+            </td></tr>`;
 
-        const statusLabel = {
-            'complete':    '✅ Complete',
-            'in_progress': '⏳ In Progress',
-            'failed':      '❌ Failed'
-        }[t.status] || t.status;
+            const params = new URLSearchParams({
+                page:     currentPage,
+                per_page: PER_PAGE,
+                ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
+            });
 
-        const progressPct = t.progress || 0;
+            fetch(`/api/history?${params}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    renderTable(data.transfers);
+                    renderPagination(data.pagination);
+                    updateStats(data.transfers, data.pagination);
+                })
+                .catch(err => {
+                    tbody.innerHTML = `<tr><td colspan="10" class="table-message table-error">
+                        ❌ ${escHtml(err.message)}
+                    </td></tr>`;
+                });
+        }
 
-        row.innerHTML = `
-            <td style="color:#555">${((currentPage - 1) * PER_PAGE) + i + 1}</td>
-            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;
-                       white-space:nowrap;" title="${escHtml(t.original_name)}">
-                ${escHtml(t.original_name)}
-            </td>
-            <td style="white-space:nowrap">${t.file_size_fmt}</td>
-            <td style="color:#aaa;font-size:0.9em">${t.sender_ip || '—'}</td>
-            <td style="color:#aaa;font-size:0.9em">${escHtml(t.recipient)}</td>
-            <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
-            <td>
-                <span class="progress-mini">
-                    <span class="progress-mini-fill" style="width:${progressPct}%"></span>
-                </span>
-                <span style="font-size:0.85em;color:#666">${progressPct}%</span>
-            </td>
-            <td style="color:#00ffaa;white-space:nowrap">${t.speed_fmt}</td>
-            <td style="color:#aaa;white-space:nowrap">${t.duration_fmt}</td>
-            <td style="color:#555;font-size:0.8em;white-space:nowrap">${t.started_at}</td>
-        `;
-        tbody.appendChild(row);
-    });
-}
+        function renderTable(transfers) {
+            const tbody = document.getElementById('historyBody');
+            tbody.innerHTML = '';
 
-// ── Stats ──
-function updateStats(transfers, total) {
-    // Re-fetch all pages briefly — just use visible data for approximation
-    const complete    = transfers.filter(t => t.status === 'complete').length;
-    const in_progress = transfers.filter(t => t.status === 'in_progress').length;
-    const totalBytes  = transfers.reduce((sum, t) => sum + (t.file_size || 0), 0);
-    const speeds      = transfers
-        .filter(t => t.speed_fmt && t.speed_fmt !== '—')
-        .map(t => t.speed_fmt);
+            if (!transfers.length) {
+                tbody.innerHTML = `<tr><td colspan="10" class="table-message">
+                    No transfers found
+                </td></tr>`;
+                return;
+            }
 
-    document.getElementById('statTotal').textContent    = total;
-    document.getElementById('statComplete').textContent = complete;
-    document.getElementById('statProgress').textContent = in_progress;
-    document.getElementById('statData').textContent     = formatSize(totalBytes);
-    document.getElementById('statSpeed').textContent    = speeds.length
-        ? speeds[0]   // most recent transfer speed
-        : '—';
-}
+            transfers.forEach((t, i) => {
+                const row    = document.createElement('tr');
+                row.className = `row-${t.status}`;
 
-// ── Pagination ──
-function renderPagination(p) {
-    const container = document.getElementById('pagination');
-    container.innerHTML = '';
+                const pct   = t.progress || 0;
+                const fillClass = t.status === 'in_progress' ? 'amber' : t.status === 'failed' ? 'red' : '';
 
-    if (p.total_pages <= 1) return;
+                const statusMap = {
+                    complete:    `<span class="status-badge status-complete">✅ Complete</span>`,
+                    in_progress: `<span class="status-badge status-in_progress">⏳ Active</span>`,
+                    failed:      `<span class="status-badge status-failed">❌ Failed</span>`
+                };
 
-    // Prev
-    const prev = document.createElement('button');
-    prev.className   = 'page-btn';
-    prev.textContent = '← Prev';
-    prev.disabled    = p.page <= 1;
-    prev.onclick     = () => { currentPage = p.page - 1; loadHistory(); };
-    container.appendChild(prev);
+                row.innerHTML = `
+                    <td style="color:var(--text-muted)">${((currentPage-1)*PER_PAGE)+i+1}</td>
+                    <td style="font-family:var(--font-mono);font-size:0.82em;max-width:200px;
+                               overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                               color:var(--text-primary)" title="${escHtml(t.original_name)}">
+                        ${escHtml(t.original_name)}
+                    </td>
+                    <td style="font-family:var(--font-mono);font-size:0.8em;white-space:nowrap">
+                        ${t.file_size_fmt}
+                    </td>
+                    <td style="font-family:var(--font-mono);font-size:0.78em;color:var(--text-muted)">
+                        ${escHtml(t.sender_ip || '—')}
+                    </td>
+                    <td style="font-family:var(--font-mono);font-size:0.78em;color:var(--text-muted)">
+                        ${escHtml(t.recipient || '—')}
+                    </td>
+                    <td>${statusMap[t.status] || t.status}</td>
+                    <td>
+                        <span class="progress-mini">
+                            <span class="progress-mini-fill ${fillClass}" style="width:${pct}%"></span>
+                        </span>
+                        <span style="font-family:var(--font-mono);font-size:0.78em;color:var(--text-muted)">
+                            ${pct}%
+                        </span>
+                    </td>
+                    <td><span class="speed-value">${escHtml(t.speed_fmt || '—')}</span></td>
+                    <td style="font-family:var(--font-mono);font-size:0.78em;color:var(--text-secondary);white-space:nowrap">
+                        ${escHtml(t.duration_fmt || '—')}
+                    </td>
+                    <td style="font-family:var(--font-mono);font-size:0.75em;color:var(--text-muted);white-space:nowrap">
+                        ${escHtml(t.started_at || '—')}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
 
-    // Page numbers — show window of 5
-    const start = Math.max(1, p.page - 2);
-    const end   = Math.min(p.total_pages, start + 4);
+        function updateStats(transfers, pagination) {
+            const complete    = transfers.filter(t => t.status === 'complete').length;
+            const in_progress = transfers.filter(t => t.status === 'in_progress').length;
+            const totalBytes  = transfers.reduce((s, t) => s + (t.file_size || 0), 0);
+            const speeds      = transfers.filter(t => t.speed_fmt && t.speed_fmt !== '—');
 
-    for (let pg = start; pg <= end; pg++) {
-        const btn = document.createElement('button');
-        btn.className   = 'page-btn' + (pg === p.page ? ' active' : '');
-        btn.textContent = pg;
-        btn.onclick     = ((n) => () => { currentPage = n; loadHistory(); })(pg);
-        container.appendChild(btn);
-    }
+            document.getElementById('statTotal').textContent    = pagination.total;
+            document.getElementById('statComplete').textContent = complete;
+            document.getElementById('statProgress').textContent = in_progress;
+            document.getElementById('statData').textContent     = formatSize(totalBytes);
+            document.getElementById('statSpeed').textContent    = speeds.length ? speeds[0].speed_fmt : '—';
+        }
 
-    // Next
-    const next = document.createElement('button');
-    next.className   = 'page-btn';
-    next.textContent = 'Next →';
-    next.disabled    = p.page >= p.total_pages;
-    next.onclick     = () => { currentPage = p.page + 1; loadHistory(); };
-    container.appendChild(next);
+        function renderPagination(p) {
+            const container = document.getElementById('pagination');
+            container.innerHTML = '';
+            if (p.total_pages <= 1) return;
 
-    const info = document.createElement('span');
-    info.className   = 'page-info';
-    info.textContent = `Page ${p.page} of ${p.total_pages} · ${p.total} transfers`;
-    container.appendChild(info);
-}
+            const btn = (label, page, disabled, active) => {
+                const b = document.createElement('button');
+                b.className   = `page-btn${active ? ' active' : ''}`;
+                b.textContent = label;
+                b.disabled    = disabled;
+                if (!disabled) b.onclick = () => { currentPage = page; loadHistory(); };
+                return b;
+            };
 
-// ── CSV Export ──
-function exportCSV() {
-    const params = new URLSearchParams({
-        export: 'csv',
-        per_page: 10000,
-        ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
-    });
-    window.location.href = `/api/history?${params}`;
-}
+            container.appendChild(btn('«', 1,             currentPage === 1, false));
+            container.appendChild(btn('‹', currentPage-1, currentPage === 1, false));
 
-// ── Utilities ──
-function escHtml(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+            const start = Math.max(1, currentPage-2);
+            const end   = Math.min(p.total_pages, start+4);
+            for (let pg = start; pg <= end; pg++) {
+                container.appendChild(btn(pg, pg, false, pg === currentPage));
+            }
 
-function formatSize(bytes) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let i = 0;
-    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
-    return `${bytes.toFixed(1)} ${units[i]}`;
-}
-</script>
+            container.appendChild(btn('›', currentPage+1, currentPage === p.total_pages, false));
+            container.appendChild(btn('»', p.total_pages, currentPage === p.total_pages, false));
+
+            const info = document.createElement('span');
+            info.className   = 'page-info';
+            info.textContent = `Page ${p.page} of ${p.total_pages} · ${p.total} transfers`;
+            container.appendChild(info);
+        }
+
+        function exportCSV() {
+            const params = new URLSearchParams({
+                export: 'csv', per_page: 10000,
+                ...Object.fromEntries(Object.entries(currentFilters).filter(([, v]) => v))
+            });
+            window.location.href = `/api/history?${params}`;
+        }
+
+        function formatSize(bytes) {
+            if (!bytes) return '0 B';
+            const u = ['B','KB','MB','GB'];
+            let i = 0;
+            while (bytes >= 1024 && i < u.length-1) { bytes /= 1024; i++; }
+            return `${bytes.toFixed(1)} ${u[i]}`;
+        }
+
+        function escHtml(str) {
+            return String(str||'')
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+    </script>
 </body>
 </html>
