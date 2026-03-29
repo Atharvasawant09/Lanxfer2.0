@@ -254,18 +254,16 @@ function buildTrayMenu() {
 // 3. OVERLAY WINDOW (hotkey-triggered)
 // ═══════════════════════════════════════════════════════════
 
+// At TOP of file, outside all functions — declare once
+let ignoreBlur = false;
+ipcMain.on('set-ignore-blur', (e, val) => { ignoreBlur = val; });
+
 function createOverlayWindow() {
-    const display = screen.getPrimaryDisplay();
-    const { width: sw, height: sh } = display.workAreaSize;
-    const scaleFactor = display.scaleFactor || 1;
-
-    // Window dimensions
+    const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
     const WIN_W = 1250;
-    const WIN_H = 750;
-
-    // Position: bottom-right corner with 20px margin
-    const posX = sw - WIN_W - 20;
-    const posY = sh - WIN_H - 20;
+    const WIN_H = 950;
+    const posX  = sw - WIN_W - 20;
+    const posY  = sh - WIN_H - 20;
 
     overlayWindow = new BrowserWindow({
         width:       WIN_W,
@@ -275,7 +273,7 @@ function createOverlayWindow() {
         show:        false,
         frame:       false,
         transparent: true,
-        resizable:   true,       // ← allow manual resize if needed
+        resizable:   true,
         skipTaskbar: true,
         alwaysOnTop: true,
         webPreferences: {
@@ -288,67 +286,56 @@ function createOverlayWindow() {
 
     overlayWindow.loadURL(`${FLASK_URL}?overlay=1`);
 
-    // Inject CSS + force viewport after load
     overlayWindow.webContents.on('did-finish-load', () => {
-
-    // Get the actual page width and zoom to fit the window
-    overlayWindow.webContents.executeJavaScript(`
-        (function() {
-            // Fix viewport
-            let meta = document.querySelector('meta[name="viewport"]');
-            if (!meta) {
-                meta = document.createElement('meta');
-                meta.name = 'viewport';
-                document.head.appendChild(meta);
+        // Auto-zoom to fit content width
+        overlayWindow.webContents.executeJavaScript(`
+            (function() {
+                let meta = document.querySelector('meta[name="viewport"]');
+                if (!meta) { meta = document.createElement('meta'); meta.name = 'viewport'; document.head.appendChild(meta); }
+                meta.content = 'width=device-width, initial-scale=1.0';
+                return document.documentElement.scrollWidth;
+            })();
+        `).then(contentWidth => {
+            const w = overlayWindow.getBounds().width;
+            if (contentWidth > w) {
+                overlayWindow.webContents.setZoomFactor(w / contentWidth);
             }
-            meta.content = 'width=device-width, initial-scale=1.0';
+        });
 
-            // Return the actual content width so Electron can zoom to fit
-            return document.documentElement.scrollWidth;
-        })();
-    `).then(contentWidth => {
-        const WIN_W = overlayWindow.getBounds().width;
-        if (contentWidth > WIN_W) {
-            const zoomFactor = WIN_W / contentWidth;
-            overlayWindow.webContents.setZoomFactor(zoomFactor);
-            console.log(`[Overlay] Zoom: ${contentWidth}px → ${WIN_W}px (factor: ${zoomFactor.toFixed(2)})`);
-        }
+       overlayWindow.webContents.insertCSS(`
+    html { overflow-y: auto !important; overflow-x: hidden !important; }
+    body {
+        background: rgba(0, 0, 0, 0.93) !important;
+        border: 1px solid #00ff41 !important;
+        border-radius: 6px !important;
+        box-shadow: 0 0 30px rgba(0, 255, 65, 0.12) !important;
+        margin: 0 !important;
+    }
+    ::-webkit-scrollbar       { width: 4px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: #00ff41; border-radius: 2px; }
+`);
+// ← .nav-bar { display: none !important; } is REMOVED
+
+
     });
 
-    overlayWindow.webContents.insertCSS(`
-        /* Overlay shell styling */
-        html {
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-        }
-
-        body {
-            background: rgba(0, 0, 0, 0.93) !important;
-            border: 1px solid #00ff00 !important;
-            border-radius: 6px !important;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.12) !important;
-            margin: 0 !important;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar       { width: 4px; }
-        ::-webkit-scrollbar-track { background: #000; }
-        ::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 2px; }
-
-        /* Hide nav in overlay */
-        .nav-bar { display: none !important; }
-    `);
-});
-
-
+    // ✅ Single blur handler — registered once, respects ignoreBlur
     overlayWindow.on('blur', () => {
+        if (ignoreBlur) return;
         if (overlayWindow && !overlayWindow.isDestroyed()) {
-            overlayWindow.hide();
+            setTimeout(() => {
+                if (!ignoreBlur && overlayWindow &&
+                    !overlayWindow.isDestroyed() && !overlayWindow.isFocused()) {
+                    overlayWindow.hide();
+                }
+            }, 300);
         }
     });
 
     overlayWindow.on('closed', () => { overlayWindow = null; });
 }
+
 
 
 function showOverlay() {

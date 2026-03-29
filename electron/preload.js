@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     transferFailed: (filename, peer) =>
         ipcRenderer.send('transfer-failed', { filename, peer }),
 
+    // Add to contextBridge.exposeInMainWorld('electronAPI', { ... })
+setIgnoreBlur: (val) => ipcRenderer.send('set-ignore-blur', val),
+
+
     // Get Flask URL
     getFlaskUrl: () => ipcRenderer.invoke('get-flask-url'),
 

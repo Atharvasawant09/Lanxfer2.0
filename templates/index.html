@@ -3,24 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LANxfer</title>
+    <title>LANxfer 2.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>LANxfer <span style="font-size:0.5em; opacity:0.6;">v2.0</span></h1>
-    <a href="/history" style="
-    font-family: monospace;
-    font-size: 0.85em;
-    margin-right: 5px;
-"><button>📋 History</button></a>
 
+    <!-- ── Top Nav ── -->
+    <nav class="nav-bar">
+        <div class="nav-brand">
+            <span class="nav-logo">⟨LX⟩</span>
+            <span class="nav-title">LANxfer</span>
+            <span class="nav-version">v2.0</span>
+        </div>
+        <div class="nav-actions">
+            <div id="securityStatus" class="security-status pending">
+                🔑 Performing key exchange...
+            </div>
+            <a href="/history" class="nav-btn">📋 History</a>
+        </div>
+    </nav>
 
-    <!-- Security Status Bar -->
-    <div id="securityStatus" class="security-status pending">
-        🔑 Performing key exchange...
-    </div>
-
-    <!-- Device Fingerprint Trust Dialog -->
+    <!-- ── Device Fingerprint Trust Dialog ── -->
     <div id="fingerprintDialog" class="dialog-overlay" style="display:none;">
         <div class="dialog-box">
             <h2>⚠️ New Device</h2>
@@ -33,125 +39,296 @@
             </div>
         </div>
     </div>
-    <!-- QR Code Pairing Modal -->
-<div id="qrModal" class="dialog-overlay" style="display:none;">
-    <div class="dialog-box qr-dialog">
-        <h2>📱 Scan to Connect</h2>
-        <p>Scan this QR code with your phone's camera to connect instantly</p>
-        <div class="qr-container">
-            <img id="qrImage" src="" alt="QR Code" class="qr-image">
-            <div class="qr-loading" id="qrLoading">⏳ Generating...</div>
-        </div>
-        <div class="qr-info">
-            <div class="qr-url" id="qrUrl"></div>
-            <div class="qr-device" id="qrDevice"></div>
-        </div>
-        <p class="qr-hint">📌 Same Wi-Fi required • Tap "Advanced → Proceed" on cert warning</p>
-        <button onclick="closeQRModal()" class="btn-close-qr">✖ Close</button>
-    </div>
-</div>
 
-    <div class="upload-container" id="dropZone">
-        <div class="upload-prompt">
-            <div class="upload-icon">🗃️</div>
-            <div>Drag &amp; drop files here</div>
-            <div>or</div>
-            <div class="file-input-wrapper">
-                <input type="file" id="fileInput">
-                <button type="button">Choose File</button>
+    <!-- ── QR Code Modal ── -->
+    <div id="qrModal" class="dialog-overlay" style="display:none;">
+        <div class="dialog-box qr-dialog">
+            <h2>📱 Scan to Connect</h2>
+            <p>Scan this QR code with your phone's camera to connect instantly</p>
+            <div class="qr-container">
+                <img id="qrImage" src="" alt="QR Code" class="qr-image">
+                <div class="qr-loading" id="qrLoading">⏳ Generating...</div>
             </div>
-            <div class="recipient-wrapper">
-                <select id="recipientSelect">
+            <div class="qr-info">
+                <div class="qr-url" id="qrUrl"></div>
+                <div class="qr-device" id="qrDevice"></div>
+            </div>
+            <p class="qr-hint">📌 Same Wi-Fi required · Tap "Advanced → Proceed" on cert warning</p>
+            <button onclick="closeQRModal()" class="btn-close-qr">✖ Close</button>
+        </div>
+    </div>
+
+    <!-- ── Main Layout ── -->
+    <main class="dashboard">
+
+        <!-- ── LEFT: Upload Panel ── -->
+        <section class="panel upload-panel" id="dropZone">
+            <div class="panel-header">
+                <span class="panel-icon">📤</span>
+                <span class="panel-title">Send File</span>
+            </div>
+
+            <div class="upload-prompt">
+                <div class="upload-icon-wrap">
+                    <div class="upload-icon">🗃️</div>
+                    <div class="upload-hint">Drag &amp; drop files here</div>
+                    <div class="upload-or">or</div>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput">
+                        <button type="button" class="btn-outline">Choose File</button>
+                    </div>
+                </div>
+
+                <div class="selected-file" id="selectedFile"></div>
+
+                <!-- Chunked Progress -->
+                <div class="progress-wrapper">
+                    <div class="chunk-bar" id="chunkBar"></div>
+                    <div class="progress-stats">
+                        <span class="progress-text">0%</span>
+                        <span class="transfer-speed" id="transferSpeed"></span>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar"></div>
+                    </div>
+                </div>
+
+                <div class="send-controls">
+                    <select id="recipientSelect" class="styled-select">
+                        <option value="Everyone">Everyone</option>
+                    </select>
+                    <button onclick="fetchIPs()" id="refreshIPsButton" class="btn-icon">
+                        🔄 Refresh Peers
+                    </button>
+                </div>
+
+                <div class="action-row">
+                    <button type="button" onclick="showQRCode()" id="qrButton" class="btn-secondary">
+                        📱 Show QR Code
+                    </button>
+                    <button onclick="uploadFile()" id="uploadButton" class="btn-primary">
+                        ⬆ Upload
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── RIGHT: Clipboard Panel ── -->
+        <section class="panel clipboard-panel" id="clipboardPanel">
+            <div class="panel-header">
+                <span class="panel-icon">📋</span>
+                <span class="panel-title">Clipboard Sharing</span>
+            </div>
+
+            <div class="clipboard-controls">
+                <select id="clipboardRecipient" class="styled-select">
                     <option value="Everyone">Everyone</option>
                 </select>
-                <button onclick="fetchIPs()" id="refreshIPsButton">Refresh Peers</button>
+                <button onclick="sendClipboard()" id="clipboardSendBtn" class="btn-primary">
+                    📤 Send My Clipboard
+                </button>
             </div>
-            <!-- QR Code Pairing Button -->
-            <button type="button" onclick="showQRCode()" id="qrButton">
-            📱 Show QR Code
-            </button>
 
+            <div class="clipboard-status" id="clipboardStatus"></div>
+
+            <!-- <div class="clipboard-history">
+                <div class="section-label">Recent Clipboard Activity</div>
+                <ul id="clipboardHistoryList">
+                    <li class="empty-state">
+                        <span class="blink">▋</span> No clipboard activity yet
+                    </li>
+                </ul>
+            </div> -->
+        </section>
+
+    </main>
+
+    <!-- ── Files Table ── -->
+    <section class="files-section">
+        <div class="section-header">
+            <h3 class="section-title">📁 Available Files</h3>
+            <span class="file-count" id="fileCount"></span>
         </div>
-        <div class="selected-file" id="selectedFile"></div>
-        <div class="progress-wrapper">
-            <div class="progress-container">
-                <div class="progress-bar"></div>
+
+        <div class="table-wrap">
+            <table id="fileTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th class="sortable" data-sort="name">File Name</th>
+                        <th class="sortable" data-sort="size">Size</th>
+                        <th class="sortable" data-sort="modified">Uploaded</th>
+                        <th>Download</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="empty-row">
+                        <td colspan="6">
+                            <span class="blink">▋</span> Waiting for transfers...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ── Incoming Clipboard Toast ── -->
+    <div class="clipboard-toast" id="clipboardToast" style="display:none;">
+        <div class="toast-icon" id="toastIcon">📋</div>
+        <div class="toast-body">
+            <div class="toast-title" id="toastTitle">Clipboard received</div>
+            <div class="toast-detail" id="toastDetail"></div>
+            <img id="toastImgPreview"
+                 style="display:none;max-width:160px;max-height:100px;
+                        object-fit:contain;border:1px solid #2ea043;margin-top:6px;">
+        </div>
+        <div class="toast-actions">
+            <button onclick="acceptClipboard()" id="toastAcceptBtn">✅ Apply</button>
+            <button onclick="dismissToast()">✕</button>
+        </div>
+    </div>
+
+    <!-- ── Ctrl+K Command Palette ── -->
+    <div id="cmdPalette" class="cmd-overlay" style="display:none;">
+        <div class="cmd-box">
+            <div class="cmd-input-wrap">
+                <span class="cmd-icon">⌘</span>
+                <input type="text" id="cmdInput" placeholder="Search files, actions, peers..." autocomplete="off">
+                <span class="cmd-esc" onclick="closePalette()">ESC</span>
             </div>
-            <div class="progress-text">0%</div>
+            <div class="cmd-results" id="cmdResults"></div>
+            <div class="cmd-hint">
+                <span>↑↓ navigate</span>
+                <span>↵ select</span>
+                <span>ESC close</span>
+            </div>
         </div>
-        <button onclick="uploadFile()" id="uploadButton">Upload</button>
     </div>
 
-    <h3>Available Files</h3>
-    
-<!-- ── Clipboard Panel ─────────────────────────── -->
-<div class="clipboard-panel" id="clipboardPanel">
-    <h3>📋 Clipboard Sharing</h3>
-
-    <div class="clipboard-controls">
-        <select id="clipboardRecipient">
-            <option value="Everyone">Everyone</option>
-        </select>
-        <button onclick="sendClipboard()" id="clipboardSendBtn">
-            📤 Send My Clipboard
-        </button>
-    </div>
-
-    <div class="clipboard-status" id="clipboardStatus"></div>
-
-    <div class="clipboard-history" id="clipboardHistory">
-        <h4>Recent Clipboard Activity</h4>
-        <ul id="clipboardHistoryList"></ul>
-    </div>
-</div>
-
-<!-- ── Incoming Clipboard Toast ───────────────────── -->
-<!-- Replace the existing toast div entirely -->
-<div class="clipboard-toast" id="clipboardToast" style="display:none;">
-    <div class="toast-icon" id="toastIcon">📋</div>
-    <div class="toast-body">
-        <div class="toast-title" id="toastTitle">Clipboard received</div>
-        <div class="toast-detail" id="toastDetail"></div>
-        <!-- Image preview slot — hidden by default -->
-        <img id="toastImgPreview"
-             style="display:none;max-width:160px;max-height:100px;
-                    object-fit:contain;border:1px solid #00ff00;margin-top:6px;">
-    </div>
-    <div class="toast-actions">
-        <button onclick="acceptClipboard()" id="toastAcceptBtn">✅ Apply</button>
-        <button onclick="dismissToast()">✕</button>
-    </div>
-</div>
-
-
-
-    <table id="fileTable">
-        <thead>
-            <tr>
-                <th>#</th>
-                <th class="sortable" data-sort="name">File Name</th>
-                <th class="sortable" data-sort="size">Size</th>
-                <th class="sortable" data-sort="modified">Uploaded</th>
-                <th>Download</th>
-                <th>Delete</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-
-    <!-- CryptoJS: SHA-256 chunk hashing only -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <!-- Socket.IO client -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <!-- Force polling transport — college/restricted WiFi blocks WebSocket upgrade -->
-   <script>
-    window.__SOCKET_OPTS = {
-        transports: ['polling'],
-        upgrade: false,
-        secure: true,                    // use wss/https
-        rejectUnauthorized: false        // accept self-signed cert
+    <script>
+        window.__SOCKET_OPTS = {
+            transports: ['polling'],
+            upgrade: false,
+            secure: true,
+            rejectUnauthorized: false
+        };
+    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+    // ── Ctrl+K Command Palette ──────────────────────
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            togglePalette();
+        }
+        if (e.key === 'Escape') closePalette();
+    });
+
+    function togglePalette() {
+        const el = document.getElementById('cmdPalette');
+        if (el.style.display === 'none') {
+            el.style.display = 'flex';
+            document.getElementById('cmdInput').focus();
+            renderPaletteDefaults();
+        } else {
+            closePalette();
+        }
+    }
+
+    function closePalette() {
+        document.getElementById('cmdPalette').style.display = 'none';
+        document.getElementById('cmdInput').value = '';
+    }
+
+    const PALETTE_ACTIONS = [
+        { icon: '⬆', label: 'Upload File',         action: () => document.getElementById('fileInput').click() },
+        { icon: '🔄', label: 'Refresh Peers',       action: () => { fetchIPs(); closePalette(); } },
+        { icon: '📋', label: 'Send Clipboard',      action: () => { sendClipboard(); closePalette(); } },
+        { icon: '📱', label: 'Show QR Code',        action: () => { showQRCode(); closePalette(); } },
+        { icon: '📊', label: 'Transfer History',    action: () => window.location.href = '/history' },
+        { icon: '🔍', label: 'Search Files...',     action: null, isSearch: true },
+    ];
+
+    function renderPaletteDefaults() {
+        const res = document.getElementById('cmdResults');
+        res.innerHTML = PALETTE_ACTIONS.map((a, i) => `
+            <div class="cmd-item" onclick="runAction(${i})">
+                <span class="cmd-item-icon">${a.icon}</span>
+                <span class="cmd-item-label">${a.label}</span>
+            </div>
+        `).join('');
+    }
+
+    function runAction(i) {
+        const a = PALETTE_ACTIONS[i];
+        if (a.action) { a.action(); closePalette(); }
+    }
+
+    document.getElementById('cmdInput').addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        if (!q) { renderPaletteDefaults(); return; }
+
+        // Search actions
+        const actionMatches = PALETTE_ACTIONS
+            .filter(a => a.label.toLowerCase().includes(q))
+            .map((a, i) => `
+                <div class="cmd-item" onclick="runAction(${PALETTE_ACTIONS.indexOf(a)})">
+                    <span class="cmd-item-icon">${a.icon}</span>
+                    <span class="cmd-item-label">${a.label}</span>
+                </div>
+            `).join('');
+
+        // Search file table
+        const rows = document.querySelectorAll('#fileTable tbody tr');
+        const fileMatches = [...rows]
+            .filter(r => r.textContent.toLowerCase().includes(q))
+            .map(r => {
+                const name = r.cells[1]?.textContent?.trim() || '';
+                const size = r.cells[2]?.textContent?.trim() || '';
+                return `
+                    <div class="cmd-item cmd-file" onclick="closePalette()">
+                        <span class="cmd-item-icon">📄</span>
+                        <span class="cmd-item-label">${name}</span>
+                        <span class="cmd-item-meta">${size}</span>
+                    </div>
+                `;
+            }).join('');
+
+        document.getElementById('cmdResults').innerHTML =
+            (actionMatches || '') + (fileMatches || '') ||
+            `<div class="cmd-empty">No results for "${q}"</div>`;
+    });
+
+    // ── Chunk progress bar builder ──────────────────
+    // Call this from script.js when chunked transfer starts
+    // window.initChunkBar(totalChunks) and window.markChunk(index)
+    window.initChunkBar = function(total) {
+        const bar = document.getElementById('chunkBar');
+        bar.innerHTML = '';
+        for (let i = 0; i < total; i++) {
+            const box = document.createElement('span');
+            box.className = 'chunk-box';
+            box.id = `chunk-${i}`;
+            bar.appendChild(box);
+        }
+        bar.style.display = 'flex';
     };
-</script>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+    window.markChunk = function(index) {
+        const box = document.getElementById(`chunk-${index}`);
+        if (box) {
+            box.classList.add('done');
+            box.classList.add('flash');
+            setTimeout(() => box.classList.remove('flash'), 400);
+        }
+    };
+
+    window.resetChunkBar = function() {
+        document.getElementById('chunkBar').innerHTML = '';
+    };
+    </script>
 </body>
 </html>

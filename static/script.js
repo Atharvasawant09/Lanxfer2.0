@@ -39,9 +39,10 @@ socket.on('transfer_complete', (data) => {
     const progressBar     = document.querySelector('.progress-bar');
     const progressText    = document.querySelector('.progress-text');
 
-if (window.electronAPI) {
-    window.electronAPI.transferComplete(data.filename, data.peer_ip);
-}
+    if (window.electronAPI) {
+        window.electronAPI.transferComplete(data.filename, data.peer_ip);
+    }
+
     progressBar.style.width      = '100%';
     progressText.textContent     = 'Complete!';
     progressBar.style.background = 'linear-gradient(90deg, #33ff33, #00ffaa)';
@@ -49,7 +50,7 @@ if (window.electronAPI) {
     setTimeout(() => {
         progressWrapper.style.display = 'none';
         progressBar.style.width       = '0%';
-        progressBar.style.background  = 'linear-gradient(90deg, #33ff33, #00ff00)';
+        progressBar.style.background  = 'linear-gradient(90deg, #00c853, #00ff41)';
         progressText.textContent      = '0%';
         alert(`✅ ${original_name} transferred successfully! (${file_size})`);
         fetchFiles();
@@ -68,8 +69,8 @@ socket.on('transfer_error', (data) => {
     if (progressWrapper) progressWrapper.style.display = 'none';
 
     if (window.electronAPI) {
-    window.electronAPI.transferFailed(data.filename, data.peer_ip);
-}
+        window.electronAPI.transferFailed(data.filename, data.peer_ip);
+    }
 });
 
 socket.on('chunk_error', (data) => {
@@ -123,7 +124,6 @@ socket.on('key_exchange_reply', async (data) => {
         } else {
             showFingerprintDialog(deviceFingerprint, data.device_name);
         }
-
     } catch (e) {
         console.error('[ECDH] Key derivation failed:', e);
         updateSecurityStatus('⚠️ Key derivation failed', 'error');
@@ -172,8 +172,8 @@ function showFingerprintDialog(fingerprint, deviceName) {
     const fpEl   = document.getElementById('fingerprintValue');
     const nameEl = document.getElementById('fingerprintDeviceName');
     if (!dialog) return;
-    fpEl.textContent   = fingerprint;
-    nameEl.textContent = deviceName;
+    fpEl.textContent     = fingerprint;
+    nameEl.textContent   = deviceName;
     dialog.style.display = 'flex';
 }
 
@@ -214,10 +214,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const dropZone  = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
 
-    fileInput.addEventListener('change', function (e) {
-        handleFileSelect(e.target.files[0]);
+    // ✅ File select via dialog — show name + unblock Electron blur
+    fileInput.addEventListener('click', () => {
+        if (window.electronAPI) window.electronAPI.setIgnoreBlur(true);
     });
 
+    fileInput.addEventListener('change', (e) => {
+        if (window.electronAPI) window.electronAPI.setIgnoreBlur(false);
+        if (e.target.files[0]) handleFileSelect(e.target.files[0]);
+    });
+
+    // Drag & drop event bindings
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
         document.body.addEventListener(eventName, preventDefaults, false);
@@ -227,6 +234,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ['dragleave', 'drop'].forEach(e =>     dropZone.addEventListener(e, unhighlight, false));
     dropZone.addEventListener('drop', handleDrop, false);
 
+    // Sortable table headers
     document.querySelectorAll('th.sortable').forEach(header => {
         header.addEventListener('click', () => {
             const column = header.dataset.sort;
@@ -257,6 +265,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (e.target === this) closeQRModal();
         });
     }
+
+    fetchClipboardHistory();
 });
 
 // ─────────────────────────────────────────────
@@ -329,15 +339,11 @@ function uploadFile() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ original_name: file.name, file_hash: fileHash })
         })
-        .then(r => {
-            console.log(`[Delta] /delta/check HTTP ${r.status}`);
-            return r.json();
-        })
+        .then(r => r.json())
         .then(check => {
             console.log('[Delta] check result:', check);
 
             if (check.match) {
-                // ── Identical file — skip entirely ──
                 progressBar.style.width  = '100%';
                 progressText.textContent = '✅ Already up to date!';
                 setTimeout(() => {
@@ -353,7 +359,6 @@ function uploadFile() {
             }
 
             if (check.exists && !check.match) {
-                // ── Previous version exists — delta transfer ──
                 console.log(`[Delta] Previous version found: ${check.storage_name}`);
                 progressText.textContent = '📡 Fetching signature...';
                 attemptDeltaTransfer(
@@ -361,7 +366,6 @@ function uploadFile() {
                     progressBar, progressText, progressWrapper
                 );
             } else {
-                // ── No previous version — full WebSocket transfer ──
                 console.log('[Delta] No previous version — full transfer');
                 progressText.textContent = '0%';
                 doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
@@ -380,7 +384,7 @@ function uploadFile() {
 }
 
 // ─────────────────────────────────────────────
-// Hash entire file incrementally (no full memory load)
+// Hash entire file incrementally
 // ─────────────────────────────────────────────
 
 async function hashFile(file) {
@@ -396,8 +400,7 @@ async function hashFile(file) {
 }
 
 // ─────────────────────────────────────────────
-// Delta Transfer — send new file via HTTP multipart
-// Server handles signature + delta computation
+// Delta Transfer
 // ─────────────────────────────────────────────
 
 async function attemptDeltaTransfer(file, fileHash, storageName, recipient,
@@ -433,7 +436,7 @@ async function attemptDeltaTransfer(file, fileHash, storageName, recipient,
                     setTimeout(() => {
                         progressWrapper.style.display = 'none';
                         progressBar.style.width       = '0%';
-                        progressBar.style.background  = 'linear-gradient(90deg, #33ff33, #00ff00)';
+                        progressBar.style.background  = 'linear-gradient(90deg, #00c853, #00ff41)';
                         progressText.textContent      = '0%';
                         alert(`⚡ Delta sync complete!\n"${file.name}" updated (${resp.file_size})\nBandwidth saved: ~${resp.savings_pct}%`);
                         fetchFiles();
@@ -452,14 +455,14 @@ async function attemptDeltaTransfer(file, fileHash, storageName, recipient,
 
     } catch (err) {
         console.warn(`[Delta] Failed (${err.message}) — falling back to full transfer`);
-        progressBar.style.background = 'linear-gradient(90deg, #33ff33, #00ff00)';
+        progressBar.style.background = 'linear-gradient(90deg, #00c853, #00ff41)';
         progressText.textContent     = '0%';
         doFullTransfer(file, recipient, progressBar, progressText, progressWrapper);
     }
 }
 
 // ─────────────────────────────────────────────
-// Full WebSocket Transfer (unchanged from Phase 2)
+// Full WebSocket Transfer
 // ─────────────────────────────────────────────
 
 function doFullTransfer(file, recipient, progressBar, progressText, progressWrapper) {
@@ -552,19 +555,24 @@ function fetchFiles() {
         .then(files => populateFileTable(files))
         .catch(err => {
             document.querySelector('#fileTable tbody').innerHTML =
-                `<tr><td colspan="5">Error loading files: ${err.message}</td></tr>`;
+                `<tr><td colspan="6">Error loading files: ${err.message}</td></tr>`;
         });
 }
 
 function populateFileTable(files) {
     const tbody = document.querySelector('#fileTable tbody');
     tbody.innerHTML = '';
+
     if (!Array.isArray(files) || files.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='5'>No files available</td></tr>";
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="6">
+            <span class="blink">▋</span> No files yet — upload something!
+        </td></tr>`;
         return;
     }
+
     files.forEach((file, index) => {
-        const row     = document.createElement('tr');
+        const row  = document.createElement('tr');
+        row.id     = `file-row-${file.name}`;
         row.innerHTML = `
             <td>${index + 1}</td>
             <td>${escapeHtml(file.original_name)}</td>
@@ -573,6 +581,12 @@ function populateFileTable(files) {
             <td>
                 <button onclick="downloadFile('${escapeHtml(file.name)}')">
                     📥 Download
+                </button>
+            </td>
+            <td>
+                <button class="delete-btn"
+                        onclick="deleteFile('${escapeHtml(file.name)}', '${escapeHtml(file.original_name)}')">
+                    🗑️ Delete
                 </button>
             </td>
         `;
@@ -584,6 +598,23 @@ function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function deleteFile(storageName, originalName) {
+    if (!confirm(`Delete "${originalName}"?\nThis cannot be undone.`)) return;
+
+    fetch(`/delete_file/${encodeURIComponent(storageName)}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(`❌ ${data.error}`); return; }
+            const row = document.getElementById(`file-row-${storageName}`);
+            if (row) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity    = '0';
+                setTimeout(() => fetchFiles(), 300);
+            }
+        })
+        .catch(err => alert(`Delete failed: ${err.message}`));
 }
 
 // ─────────────────────────────────────────────
@@ -618,6 +649,7 @@ function fetchIPs() {
             });
             const ips = peers.map(p => p.ip);
             recipientSelect.value = ips.includes(currentValue) ? currentValue : 'Everyone';
+            setTimeout(syncClipboardRecipients, 600);
         })
         .catch(err => console.error('[fetchIPs] Error:', err));
 }
@@ -674,47 +706,31 @@ function closeQRModal() {
 // Clipboard Sharing
 // ─────────────────────────────────────────────
 
-let pendingClipboard = null; // Stores decrypted incoming clipboard data
+let pendingClipboard = null;
 
-// ── Sync recipient dropdown with main peer list ──
 function syncClipboardRecipients() {
-    const main   = document.getElementById('recipientSelect');
-    const cb     = document.getElementById('clipboardRecipient');
+    const main = document.getElementById('recipientSelect');
+    const cb   = document.getElementById('clipboardRecipient');
     if (!main || !cb) return;
 
     const current = cb.value;
     while (cb.options.length > 1) cb.remove(1);
 
     Array.from(main.options).slice(1).forEach(opt => {
-        const clone = document.createElement('option');
+        const clone       = document.createElement('option');
         clone.value       = opt.value;
         clone.textContent = opt.textContent;
         cb.appendChild(clone);
     });
 
-    if ([...cb.options].some(o => o.value === current)) {
-        cb.value = current;
-    }
+    if ([...cb.options].some(o => o.value === current)) cb.value = current;
 }
 
-// Call syncClipboardRecipients after fetchIPs resolves
-// Patch fetchIPs to also sync clipboard dropdown
-const _origFetchIPs = fetchIPs;
-window.fetchIPs = function () {
-    _origFetchIPs();
-    // Give 600ms for the dropdown to populate, then sync
-    setTimeout(syncClipboardRecipients, 600);
-};
-
-// ── Send clipboard to peer ──
 async function sendClipboard() {
-    if (!sessionKey) {
-        alert('Security handshake not complete. Please wait.');
-        return;
-    }
+    if (!sessionKey) { alert('Security handshake not complete. Please wait.'); return; }
 
-    const statusEl   = document.getElementById('clipboardStatus');
-    const recipient  = document.getElementById('clipboardRecipient').value || 'Everyone';
+    const statusEl  = document.getElementById('clipboardStatus');
+    const recipient = document.getElementById('clipboardRecipient').value || 'Everyone';
 
     statusEl.textContent = '⏳ Reading clipboard...';
 
@@ -723,53 +739,35 @@ async function sendClipboard() {
         let rawBytes;
         let preview = '';
 
-        // ── Try reading clipboard items (supports images) ──
         let clipboardItems = null;
-        try {
-            clipboardItems = await navigator.clipboard.read();
-        } catch (e) {
-            // Fallback: text-only mode (Firefox / HTTP without permissions)
-            clipboardItems = null;
-        }
+        try { clipboardItems = await navigator.clipboard.read(); } catch (e) { clipboardItems = null; }
 
         if (clipboardItems) {
             let handled = false;
-
             for (const item of clipboardItems) {
-                // ── Image ──
                 if (item.types.includes('image/png')) {
-                    const blob    = await item.getType('image/png');
-                    const arrBuf  = await blob.arrayBuffer();
-                    rawBytes      = new Uint8Array(arrBuf);
-                    contentType   = 'image';
-                    preview       = `PNG image (${formatSize(rawBytes.length)})`;
-                    handled       = true;
-                    break;
-                }
-                // ── Text ──
-                if (item.types.includes('text/plain')) {
-                    const blob   = await item.getType('text/plain');
-                    const text   = await blob.text();
-                    rawBytes     = new TextEncoder().encode(text);
-                    contentType  = 'text';
-                    preview      = text.slice(0, 80);
+                    const blob   = await item.getType('image/png');
+                    const arrBuf = await blob.arrayBuffer();
+                    rawBytes     = new Uint8Array(arrBuf);
+                    contentType  = 'image';
+                    preview      = `PNG image (${formatSize(rawBytes.length)})`;
                     handled      = true;
                     break;
                 }
+                if (item.types.includes('text/plain')) {
+                    const blob  = await item.getType('text/plain');
+                    const text  = await blob.text();
+                    rawBytes    = new TextEncoder().encode(text);
+                    contentType = 'text';
+                    preview     = text.slice(0, 80);
+                    handled     = true;
+                    break;
+                }
             }
-
-            if (!handled) {
-                statusEl.textContent = '⚠️ Clipboard is empty or unsupported type';
-                return;
-            }
-
+            if (!handled) { statusEl.textContent = '⚠️ Clipboard is empty or unsupported type'; return; }
         } else {
-            // Fallback text read
             const text = await navigator.clipboard.readText();
-            if (!text) {
-                statusEl.textContent = '⚠️ Clipboard is empty';
-                return;
-            }
+            if (!text) { statusEl.textContent = '⚠️ Clipboard is empty'; return; }
             rawBytes    = new TextEncoder().encode(text);
             contentType = 'text';
             preview     = text.slice(0, 80);
@@ -777,12 +775,9 @@ async function sendClipboard() {
 
         statusEl.textContent = `🔒 Encrypting ${contentType}...`;
 
-        // ── AES-256-GCM encrypt ──
         const nonce      = crypto.getRandomValues(new Uint8Array(12));
         const ciphertext = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv: nonce },
-            sessionKey,
-            rawBytes
+            { name: 'AES-GCM', iv: nonce }, sessionKey, rawBytes
         );
 
         statusEl.textContent = '📤 Sending...';
@@ -796,7 +791,9 @@ async function sendClipboard() {
             size_bytes:   rawBytes.length
         });
 
-        // Optimistic status — confirmed on clipboard_sent event
+        document.getElementById('clipboardStatus').style.display = 'block';
+
+
         statusEl.textContent = `✅ Sent ${contentType} (${formatSize(rawBytes.length)}) → ${recipient}`;
         fetchClipboardHistory();
 
@@ -812,18 +809,13 @@ async function sendClipboard() {
 
 socket.on('clipboard_receive', async (data) => {
     try {
-        const { from_ip, from_device, content_type, nonce, ciphertext,
-                preview, size_bytes } = data;
+        const { from_ip, from_device, content_type, nonce, ciphertext, size_bytes } = data;
 
-        const nonceBuf  = hexToBuffer(nonce);
-        const ctBuf     = new Uint8Array(ciphertext);
-
-        const plaintext = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: nonceBuf },
+        const plaintext      = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: hexToBuffer(nonce) },
             sessionKey,
-            ctBuf
+            new Uint8Array(ciphertext)
         );
-
         const plaintextBytes = new Uint8Array(plaintext);
         pendingClipboard     = { plaintext: plaintextBytes, content_type };
 
@@ -837,40 +829,27 @@ socket.on('clipboard_receive', async (data) => {
         title.textContent = `From ${from_device || from_ip}`;
 
         if (content_type === 'image') {
-            icon.textContent      = '🖼️';
-            acceptBtn.textContent = '✅ Copy Image';
-            detail.textContent    = `PNG image · ${formatSize(size_bytes)}`;
+            icon.textContent        = '🖼️';
+            acceptBtn.textContent   = '✅ Copy Image';
+            detail.textContent      = `PNG image · ${formatSize(size_bytes)}`;
             detail.style.whiteSpace = 'normal';
-
-            // Show inline preview
             const blob = new Blob([plaintextBytes], { type: 'image/png' });
             if (window._pendingBlobUrl) URL.revokeObjectURL(window._pendingBlobUrl);
             window._pendingBlobUrl = URL.createObjectURL(blob);
             imgPrev.src            = window._pendingBlobUrl;
             imgPrev.style.display  = 'block';
-
         } else {
-            // Full text — not the 80-char preview
-            const fullText = new TextDecoder().decode(plaintextBytes);
+            const fullText        = new TextDecoder().decode(plaintextBytes);
             icon.textContent      = '📋';
             acceptBtn.textContent = '✅ Copy Text';
-
-            detail.textContent    = fullText.length > 300
-                ? fullText.slice(0, 300) + '…'
-                : fullText;
-            detail.style.cssText  =
-                'color:#aaa;font-size:0.82em;max-width:260px;' +
-                'white-space:pre-wrap;word-break:break-word;' +
-                'max-height:100px;overflow-y:auto;';
-
+            detail.textContent    = fullText.length > 300 ? fullText.slice(0, 300) + '…' : fullText;
+            detail.style.cssText  = 'color:#aaa;font-size:0.82em;max-width:260px;white-space:pre-wrap;word-break:break-word;max-height:100px;overflow-y:auto;';
             if (imgPrev) imgPrev.style.display = 'none';
         }
 
         toast.style.display = 'flex';
         clearTimeout(window._toastTimer);
         window._toastTimer  = setTimeout(dismissToast, 15000);
-
-        console.log(`[Clipboard] Received ${content_type} from ${from_device} (${size_bytes}B)`);
         fetchClipboardHistory();
 
     } catch (err) {
@@ -879,41 +858,30 @@ socket.on('clipboard_receive', async (data) => {
     }
 });
 
-
 socket.on('clipboard_sent', (data) => {
-    const statusEl = document.getElementById('clipboardStatus');
-    if (statusEl) {
-        statusEl.textContent = `✅ Delivered — ${data.content_type} (${formatSize(data.size_bytes)})`;
-    }
+    const el = document.getElementById('clipboardStatus');
+    if (el) el.textContent = `✅ Delivered — ${data.content_type} (${formatSize(data.size_bytes)})`;
 });
 
 socket.on('clipboard_error', (data) => {
-    const statusEl = document.getElementById('clipboardStatus');
-    if (statusEl) statusEl.textContent = `❌ ${data.reason}`;
+    const el = document.getElementById('clipboardStatus');
+    if (el) el.textContent = `❌ ${data.reason}`;
     console.error('[Clipboard] Server error:', data.reason);
 });
 
-// ── User clicks "Apply" on toast ──
 async function acceptClipboard() {
     if (!pendingClipboard) return;
-
     try {
         const { plaintext, content_type } = pendingClipboard;
-
         if (content_type === 'image') {
             const blob = new Blob([plaintext], { type: 'image/png' });
-            await navigator.clipboard.write([
-                new ClipboardItem({ 'image/png': blob })
-            ]);
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
         } else {
-            const text = new TextDecoder().decode(plaintext);
-            await navigator.clipboard.writeText(text);
+            await navigator.clipboard.writeText(new TextDecoder().decode(plaintext));
         }
-
         dismissToast();
         showClipboardStatus(`✅ ${content_type === 'image' ? 'Image' : 'Text'} applied to clipboard`);
         pendingClipboard = null;
-
     } catch (err) {
         console.error('[Clipboard] Write error:', err);
         showClipboardStatus(`❌ Could not write to clipboard: ${err.message}`);
@@ -924,106 +892,22 @@ function dismissToast() {
     const toast = document.getElementById('clipboardToast');
     if (toast) toast.style.display = 'none';
     clearTimeout(window._toastTimer);
-
-    // Revoke object URL to free memory
-    if (window._pendingBlobUrl) {
-        URL.revokeObjectURL(window._pendingBlobUrl);
-        window._pendingBlobUrl = null;
-    }
+    if (window._pendingBlobUrl) { URL.revokeObjectURL(window._pendingBlobUrl); window._pendingBlobUrl = null; }
     const imgPrev = document.getElementById('toastImgPreview');
     if (imgPrev) imgPrev.style.display = 'none';
 }
 
-
 function showClipboardStatus(msg) {
     const el = document.getElementById('clipboardStatus');
-    if (el) el.textContent = msg;
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
 }
 
-// ── Clipboard history ──
-function fetchClipboardHistory() {
-    fetch('/clipboard/history')
-        .then(r => r.json())
-        .then(items => {
-            const list = document.getElementById('clipboardHistoryList');
-            if (!list) return;
-            list.innerHTML = '';
-            if (!items.length) {
-                list.innerHTML = '<li style="color:#555">No clipboard activity yet</li>';
-                return;
-            }
-            items.forEach(item => {
-                const li = document.createElement('li');
-                const typeIcon = item.content_type === 'image' ? '🖼️' : '📋';
-                li.innerHTML = `
-                    <span>${typeIcon} ${escapeHtml(item.preview || '(image)')} </span>
-                    <span style="color:#555">${item.sender_ip} → ${item.recipient} | ${item.sent_at}</span>
-                `;
-                list.appendChild(li);
-            });
-        })
-        .catch(err => console.error('[Clipboard history]', err));
-}
 
-// Load history on page ready
-document.addEventListener('DOMContentLoaded', () => {
-    fetchClipboardHistory();
-});
-
-function populateFileTable(files) {
-    const tbody = document.querySelector('#fileTable tbody');
-    tbody.innerHTML = '';
-
-    if (!Array.isArray(files) || files.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='6'>No files available</td></tr>";
-        return;
-    }
-
-    files.forEach((file, index) => {
-        const row     = document.createElement('tr');
-        row.id        = `file-row-${file.name}`;
-        row.innerHTML = `
-            <td>${index + 1}</td>
-            <td>${escapeHtml(file.original_name)}</td>
-            <td>${file.size_fmt}</td>
-            <td>${file.modified_fmt}</td>
-            <td>
-                <button onclick="downloadFile('${escapeHtml(file.name)}')">
-                    📥 Download
-                </button>
-            </td>
-            <td>
-                <button class="delete-btn"
-                        onclick="deleteFile('${escapeHtml(file.name)}', '${escapeHtml(file.original_name)}')">
-                    🗑️ Delete
-                </button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-function deleteFile(storageName, originalName) {
-    if (!confirm(`Delete "${originalName}"?\nThis cannot be undone.`)) return;
-
-    fetch(`/delete_file/${encodeURIComponent(storageName)}`, { method: 'DELETE' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) {
-                alert(`❌ ${data.error}`);
-                return;
-            }
-            // Animate row out
-            const row = document.getElementById(`file-row-${storageName}`);
-            if (row) {
-                row.style.transition = 'opacity 0.3s';
-                row.style.opacity    = '0';
-                setTimeout(() => fetchFiles(), 300);
-            }
-        })
-        .catch(err => alert(`Delete failed: ${err.message}`));
-}
-
+// ─────────────────────────────────────────────
+// Clipboard History
+// ─────────────────────────────────────────────
 
 function fetchClipboardHistory() {
     fetch('/clipboard/history')
@@ -1034,7 +918,7 @@ function fetchClipboardHistory() {
             list.innerHTML = '';
 
             if (!items.length) {
-                list.innerHTML = '<li style="color:#555">No clipboard activity yet</li>';
+                list.innerHTML = '<li class="empty-state"><span class="blink">▋</span> No clipboard activity yet</li>';
                 return;
             }
 
@@ -1046,11 +930,10 @@ function fetchClipboardHistory() {
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         ${typeIcon} ${escapeHtml(item.preview || '(image)')}
                     </span>
-                    <span style="color:#555;white-space:nowrap;margin:0 10px;">
+                    <span style="color:#484f58;white-space:nowrap;margin:0 10px;font-size:0.75em;">
                         ${item.sender_ip} → ${item.recipient} | ${item.sent_at}
                     </span>
-                    <button class="delete-btn-sm"
-                            onclick="deleteClipboardEntry(${item.id})">🗑️</button>
+                    <button class="delete-btn-sm" onclick="deleteClipboardEntry(${item.id})">🗑️</button>
                 `;
                 list.appendChild(li);
             });
