@@ -11,6 +11,10 @@ import json
 import csv
 import qrcode
 import base64
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 from io import BytesIO
 from dateutil import parser as dateparser
 from datetime import datetime, timedelta
