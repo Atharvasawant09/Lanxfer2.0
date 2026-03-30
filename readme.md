@@ -105,17 +105,31 @@ Instead of resending a 1GB file when you fix a typo:
 
 ##  Installation & Running
 
-### Prerequisites
+### ⚡ Option 1: Standalone Installer (Recommended)
+Requires [Python 3.9+](https://python.org/downloads) installed on your machine.
+During install, check **"Add Python to PATH"**.
+
+You just require Python to use LANxfer. The entire Python backend, virtual environment, and UI are fully bundled into a single standalone `.exe`!
+
+1. Go to the [**GitHub Releases**](https://github.com/Atharvasawant09/Lanxfer2.0/releases) tab.
+2. Download the latest `LANxfer-Setup-2.0.0.exe`.
+3. Run the installer and you're good to go!
+
+---
+
+### 🛠️ Option 2: Build From Source
+
+#### Prerequisites
 - Python 3.9+
 - Node.js 18+ and npm 9+
 
-### 1. Clone the repository
+#### 1. Clone the repository
 ```bash
 git clone https://github.com/Atharvasawant09/Lanxfer2.0.git
 cd Lanxfer2.0
 ```
 
-### 2. Setup Python Environment
+#### 2. Setup Python Environment
 ```bash
 python -m venv .venv
 
@@ -128,21 +142,28 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Setup Desktop Environment
+#### 3. Setup Desktop Environment
 ```bash
 npm install
 ```
 
-### 4. SSL Certificates (Required for HTTPS & Mobile)
+#### 4. SSL Certificates (Required for HTTPS & Mobile)
 Generate a self-signed cert in the root directory:
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
 ```
 
-### 5. Start Hacking!
+#### 5. Start Development Server
 ```bash
 npm run dev
 ```
+
+#### 6. Build the Executable
+Package the entire Electron app and Python backend into a highly optimized installer:
+```bash
+npm run build:win
+```
+*The `.exe` will be generated inside the `dist/` folder.*
 
 ---
 
