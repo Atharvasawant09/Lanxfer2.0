@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file, Response
 from flask_socketio import SocketIO, emit
 import os
-import io
 import sqlite3
 import uuid
 import threading
@@ -13,10 +12,10 @@ import qrcode
 import base64
 import sys
 import io
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-from io import BytesIO
-from dateutil import parser as dateparser
+
 from datetime import datetime, timedelta
 from delta import (
     generate_signature, signature_to_bytes, signature_from_bytes,
@@ -44,14 +43,6 @@ from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 # ─────────────────────────────────────────────
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.urandom(24)
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode='eventlet',
-    max_http_buffer_size=500 * 1024 * 1024,
-    allow_upgrades=False
-)
 
 UPLOAD_FOLDER        = 'uploads'
 CHUNKS_FOLDER        = 'chunks'
@@ -65,6 +56,26 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 for folder in [UPLOAD_FOLDER, CHUNKS_FOLDER, DB_DIR]:
     os.makedirs(folder, exist_ok=True)
+
+def get_or_create_secret_key():
+    secret_path = os.path.join(DB_DIR, 'secret.key')
+    if os.path.exists(secret_path):
+        with open(secret_path, 'rb') as f:
+            return f.read()
+    new_key = os.urandom(24)
+    with open(secret_path, 'wb') as f:
+        f.write(new_key)
+    return new_key
+
+app.config['SECRET_KEY'] = get_or_create_secret_key()
+
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    max_http_buffer_size=500 * 1024 * 1024,
+    allow_upgrades=False
+)
 
 # ─────────────────────────────────────────────
 # Trust Store
@@ -963,7 +974,7 @@ def handle_chunk(data):
                     (session_id,)
                 )
             if cursor.rowcount > 0:
-                assemble_file(session_id, dict(transfer))
+                assemble_file(session_id, dict(transfer), sender_sid=sid)
 
     except Exception as e:
         emit('chunk_error', {'chunk_index': data.get('chunk_index'), 'reason': str(e)})
@@ -1054,7 +1065,7 @@ def handle_clipboard_send(data):
         print(f"[Clipboard] Error: {e}")
 
 
-def assemble_file(session_id, transfer):
+def assemble_file(session_id, transfer, sender_sid=None):
     try:
         total_chunks  = transfer['total_chunks']
         original_name = transfer['original_name']
@@ -1095,7 +1106,7 @@ def assemble_file(session_id, transfer):
             'session_id':    session_id,
             'original_name': original_name,
             'file_size':     format_file_size(file_size)
-        })
+        }, to=sender_sid)
 
     except Exception as e:
         print(f"[WS] assemble_file error: {e}")

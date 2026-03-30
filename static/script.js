@@ -460,9 +460,6 @@ async function attemptDeltaTransfer(file, fileHash, storageName, recipient,
                         fetchFiles();
                         document.getElementById('selectedFile').style.display = 'none';
                         document.getElementById('fileInput').value = '';
-                        fetchFiles();
-                        document.getElementById('selectedFile').style.display = 'none';
-                        document.getElementById('fileInput').value = '';
                     }, 1000);
                     resolve();
                 } else {
@@ -504,8 +501,9 @@ function doFullTransfer(file, recipient, progressBar, progressText, progressWrap
         recipient: recipient
     });
 
-    socket.once('transfer_ready', async (data) => {
+    const readyHandler = async (data) => {
         if (data.session_id !== sessionId) return;
+        socket.off('transfer_ready', readyHandler);
 
         const missingChunks = data.missing_chunks;
         console.log(`[Upload] ${data.resume ? 'Resuming' : 'Starting'} — ${missingChunks.length} chunks`);
@@ -526,7 +524,7 @@ function doFullTransfer(file, recipient, progressBar, progressText, progressWrap
                 session_id: sessionId,
                 chunk_index: chunkIndex,
                 nonce: bufferToHex(nonce),
-                ciphertext: Array.from(ciphertext),
+                ciphertext: ciphertext.buffer, // Fast binary transport instead of JSON inflation
                 chunk_hash: hashHex
             });
 
@@ -545,7 +543,8 @@ function doFullTransfer(file, recipient, progressBar, progressText, progressWrap
                 socket.on('chunk_ack', ackHandler);
             });
         }
-    });
+    };
+    socket.on('transfer_ready', readyHandler);
 }
 
 async function retryChunk(transfer, chunkIndex) {
@@ -562,7 +561,7 @@ async function retryChunk(transfer, chunkIndex) {
         session_id: sessionId,
         chunk_index: chunkIndex,
         nonce: bufferToHex(nonce),
-        ciphertext: Array.from(ciphertext),
+        ciphertext: ciphertext.buffer,
         chunk_hash: hashHex
     });
 }
@@ -901,7 +900,7 @@ async function sendClipboard() {
             recipient: recipient,
             content_type: contentType,
             nonce: bufferToHex(nonce),
-            ciphertext: Array.from(new Uint8Array(ciphertext)),
+            ciphertext: ciphertext, // Sending raw ArrayBuffer directly
             preview: preview,
             size_bytes: rawBytes.length
         });
