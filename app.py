@@ -26,13 +26,17 @@ from delta import (
 from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDH, generate_private_key, SECP256R1, EllipticCurvePublicKey
 )
+from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import (
-    Encoding, PublicFormat
+    Encoding, PublicFormat, PrivateFormat, NoEncryption
 )
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
+from cryptography import x509
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import NameOID
+from cryptography import x509 as cx509
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 # ─────────────────────────────────────────────
@@ -1087,10 +1091,71 @@ def assemble_file(session_id, transfer):
         socketio.emit('transfer_error', {'session_id': session_id, 'reason': str(e)})
 
 # ─────────────────────────────────────────────
+# SSL Auto-Generation
+# ─────────────────────────────────────────────
+
+def ensure_ssl_certs(cert_path='cert.pem', key_path='key.pem'):
+    """Auto-generate a self-signed TLS certificate if one doesn't exist.
+    Uses the cryptography library already required by the project.
+    """
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        print("[SSL] Existing cert.pem / key.pem found — skipping generation.")
+        return
+
+    print("[SSL] No certificates found — auto-generating self-signed cert...")
+    try:
+        # Generate RSA-2048 private key
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+
+        # Build certificate
+        subject = issuer = cx509.Name([
+            cx509.NameAttribute(NameOID.COMMON_NAME, DEVICE_NAME),
+            cx509.NameAttribute(NameOID.ORGANIZATION_NAME, 'LANxfer'),
+        ])
+        cert = (
+            cx509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(private_key.public_key())
+            .serial_number(cx509.random_serial_number())
+            .not_valid_before(datetime.utcnow())
+            .not_valid_after(datetime.utcnow() + timedelta(days=365))
+            .add_extension(
+                cx509.SubjectAlternativeName([
+                    cx509.IPAddress(__import__('ipaddress').ip_address(LOCAL_IP)),
+                    cx509.DNSName('localhost'),
+                ]),
+                critical=False
+            )
+            .sign(private_key, hashes.SHA256(), default_backend())
+        )
+
+        # Write key.pem
+        with open(key_path, 'wb') as f:
+            f.write(private_key.private_bytes(
+                Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption()
+            ))
+
+        # Write cert.pem
+        with open(cert_path, 'wb') as f:
+            f.write(cert.public_bytes(Encoding.PEM))
+
+        print(f"[SSL] Generated cert for '{DEVICE_NAME}' @ {LOCAL_IP} (valid 365 days).")
+
+    except Exception as e:
+        print(f"[SSL] Auto-generation failed: {e}")
+        print("[SSL] Please run: openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj '/CN=localhost'")
+
+# ─────────────────────────────────────────────
 # Entry Point
 # ─────────────────────────────────────────────
 
 if __name__ == '__main__':
+    ensure_ssl_certs()
     print(f"[LANxfer 2.0] Running on https://{LOCAL_IP}:5000")
     print(f"[LANxfer 2.0] Device: {DEVICE_NAME}")
     print(f"[LANxfer 2.0] Security: ECDH-P256 + AES-256-GCM")
