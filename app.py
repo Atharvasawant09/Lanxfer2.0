@@ -935,6 +935,10 @@ def handle_chunk(data):
             if not transfer:
                 emit('chunk_error', {'chunk_index': chunk_index, 'reason': 'session_not_found'})
                 return
+            # Guard: skip if already assembling or complete
+            if transfer['status'] in ('assembling', 'complete'):
+                emit('chunk_ack', {'chunk_index': chunk_index, 'received': 0, 'total': transfer['total_chunks']})
+                return
             received = json.loads(transfer['chunks_received'])
             if chunk_index not in received:
                 received.append(chunk_index)
@@ -952,7 +956,14 @@ def handle_chunk(data):
         print(f"[WS] Chunk {chunk_index + 1}/{total} decrypted OK — {session_id}")
 
         if len(received) == total:
-            assemble_file(session_id, dict(transfer))
+            # Atomically claim assembly rights — only one thread will get rowcount > 0
+            with get_db() as conn:
+                cursor = conn.execute(
+                    "UPDATE transfers SET status = 'assembling' WHERE session_id = ? AND status = 'in_progress'",
+                    (session_id,)
+                )
+            if cursor.rowcount > 0:
+                assemble_file(session_id, dict(transfer))
 
     except Exception as e:
         emit('chunk_error', {'chunk_index': data.get('chunk_index'), 'reason': str(e)})
