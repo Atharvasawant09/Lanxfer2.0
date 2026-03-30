@@ -428,31 +428,37 @@ def download_file(filename):
 
 @app.route('/delete_file/<storage_name>', methods=['DELETE'])
 def delete_file(storage_name):
-    user_ip = request.remote_addr
+    userip = request.remote_addr
+    effective_ip = LOCAL_IP if userip in ('127.0.0.1', '::1') else userip
+
     with get_db() as conn:
         row = conn.execute(
             'SELECT * FROM files WHERE storage_name = ?', (storage_name,)
         ).fetchone()
+
     if not row:
         return jsonify({'error': 'File not found'}), 404
 
-    # Only sender or server host can delete
-    if row['sender_ip'] != user_ip and user_ip != LOCAL_IP:
-        log_event('DELETE_DENIED', user_ip, storage_name)
+    sender_ip    = LOCAL_IP if row['sender_ip'] in ('127.0.0.1', '::1') else row['sender_ip']
+    recipient_ip = row['recipient']  # 'Everyone' or specific IP
+
+    is_uploader  = (sender_ip == effective_ip)
+    is_recipient = (recipient_ip == effective_ip)
+    is_server    = (effective_ip == LOCAL_IP)
+
+    if not (is_uploader or is_recipient or is_server):
+        log_event('DELETE_DENIED', userip, storage_name)
         return jsonify({'error': 'Permission denied'}), 403
 
-    # Remove from disk
-    file_path = os.path.join(UPLOAD_FOLDER, storage_name)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    filepath = os.path.join(UPLOAD_FOLDER, storage_name)
+    if os.path.exists(filepath):
+        os.remove(filepath)
 
-    # Remove from DB
     with get_db() as conn:
         conn.execute('DELETE FROM files WHERE storage_name = ?', (storage_name,))
 
-    log_event('FILE_DELETED', user_ip, storage_name)
+    log_event('FILE_DELETED', userip, storage_name)
     return jsonify({'status': 'deleted', 'storage_name': storage_name})
-
 
 @app.route('/delete_clipboard/<int:entry_id>', methods=['DELETE'])
 def delete_clipboard(entry_id):
