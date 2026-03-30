@@ -4,57 +4,79 @@
   "description": "Enterprise-grade offline P2P file transfer over LAN",
   "main": "electron/main.js",
   "scripts": {
-    "start":       "electron .",
-    "dev":         "electron . --dev",
-    "build:win":   "electron-builder --win",
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
-    "build:mac":   "electron-builder --mac"
+    "build:mac": "electron-builder --mac"
   },
   "build": {
-  "appId": "com.lanxfer.app",
-  "productName": "LANxfer",
-  "copyright": "Copyright © 2026 LANxfer Team",
-  "files": [
-    "electron/**/*",
-    "static/**/*",
-    "templates/**/*",
-    "!node_modules/**/*"
-  ],
-  "extraResources": [
-    {
-      "from": ".",
-      "to": "backend",
-      "filter": [
-        "app.py",
-        "delta.py",
-        "requirements.txt",
-        "cert.pem",
-        "key.pem"
-      ]
-    }
-  ],
-  "win": {
-    "target": [{ "target": "nsis", "arch": ["x64"] }],
-    "icon": "electron/assets/icon.ico"
+    "appId": "com.lanxfer.app",
+    "productName": "LANxfer",
+    "copyright": "Copyright © 2026 LANxfer Team",
+    "files": [
+      "electron/**/*",
+      "static/**/*",
+      "templates/**/*",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+  {
+    "from": ".",
+    "to": "backend",
+    "filter": [
+      "app.py",
+      "delta.py",
+      "cert.pem",
+      "key.pem",
+      "requirements.txt"
+    ]
   },
-  "linux": {
-    "target": ["AppImage"],
-    "icon": "electron/assets/icon.png",
-    "category": "Network"
+  {
+    "from": "static",
+    "to": "backend/static"
   },
-  "mac": {
-    "target": "dmg",
-    "icon": "electron/assets/icon.png"
+  {
+    "from": "templates",
+    "to": "backend/templates"
   },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+  {
+    "from": ".venv",
+    "to": "backend/.venv",
+    "filter": ["**/*"]
   }
-},
+],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/assets/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "electron/assets/icon.png",
+      "category": "Network"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
   "devDependencies": {
-    "electron":         "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
   }
 }
