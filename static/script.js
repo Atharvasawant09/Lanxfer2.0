@@ -531,13 +531,18 @@ function doFullTransfer(file, recipient, progressBar, progressText, progressWrap
             });
 
             await new Promise((resolve) => {
-                socket.once('chunk_ack', () => {
+                const ackHandler = (ack) => {
+                    // Guard: only resolve if this ack belongs to our session AND this chunk
+                    if (ack.chunk_index !== chunkIndex) return;
+                    socket.off('chunk_ack', ackHandler);
                     sentCount++;
                     const percent = Math.round((sentCount / missingChunks.length) * 100);
                     progressBar.style.width = `${percent}%`;
                     progressText.textContent = `${percent}%`;
+                    if (window.markChunk) window.markChunk(chunkIndex);
                     resolve();
-                });
+                };
+                socket.on('chunk_ack', ackHandler);
             });
         }
     });
