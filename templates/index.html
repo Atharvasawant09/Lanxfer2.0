@@ -148,7 +148,19 @@
         </section>
 
     </main>
-
+<!-- ── Transfer Visualizer ── -->
+<section class="visualizer-section" id="vizSection" style="display:none;">
+    <div class="section-header">
+        <h3 class="section-title">⚡ Transfer Visualizer</h3>
+        <div class="viz-meta" id="vizMeta"></div>
+    </div>
+    <div class="viz-body">
+        <div class="viz-chart-wrap">
+            <canvas id="deltaChart" width="420" height="180"></canvas>
+        </div>
+        <div class="viz-stats" id="vizStats"></div>
+    </div>
+</section>
     <!-- ── Files Table ── -->
     <section class="files-section">
         <div class="section-header">
@@ -223,6 +235,7 @@
         };
     </script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
     // ── Ctrl+K Command Palette ──────────────────────
     document.addEventListener('keydown', (e) => {

@@ -12,25 +12,25 @@ const {
     screen
 } = require('electron');
 
-const { spawn }   = require('child_process');
-const path        = require('path');
-const http        = require('http');
-const fs          = require('fs');
+const { spawn } = require('child_process');
+const path = require('path');
+const http = require('http');
+const fs = require('fs');
 const https = require('https');
 // ── Constants ──────────────────────────────────────────────
-const FLASK_PORT  = 5000;
+const FLASK_PORT = 5000;
 const FLASK_URL = `https://localhost:${FLASK_PORT}`;
-const IS_DEV      = process.argv.includes('--dev');
-const IS_WIN      = process.platform === 'win32';
-const IS_MAC      = process.platform === 'darwin';
+const IS_DEV = process.argv.includes('--dev');
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 
 // ── State ──────────────────────────────────────────────────
-let tray          = null;
+let tray = null;
 let overlayWindow = null;
-let mainWindow    = null;
-let flaskProcess  = null;
-let flaskReady    = false;
-let isQuitting    = false;
+let mainWindow = null;
+let flaskProcess = null;
+let flaskReady = false;
+let isQuitting = false;
 
 // ═══════════════════════════════════════════════════════════
 // 1. FLASK BACKEND SPAWNER
@@ -53,14 +53,14 @@ function getPythonExecutable() {
 
     // Check for venv inside backend folder first (most reliable)
     const venvPython = [
-    path.join(getBackendPath(), '.venv', 'Scripts', 'python.exe'),
-    path.join(getBackendPath(), 'venv',  'Scripts', 'python.exe'),
-].find(p => fs.existsSync(p));
+        path.join(getBackendPath(), '.venv', 'Scripts', 'python.exe'),
+        path.join(getBackendPath(), 'venv', 'Scripts', 'python.exe'),
+    ].find(p => fs.existsSync(p));
 
-if (venvPython) {
-    console.log(`[Flask] Using venv Python: ${venvPython}`);
-    return venvPython;
-}
+    if (venvPython) {
+        console.log(`[Flask] Using venv Python: ${venvPython}`);
+        return venvPython;
+    }
 
     // Ordered by preference — avoid WindowsApps stub (it's fake)
     const candidates = [
@@ -85,8 +85,8 @@ if (venvPython) {
 
 function spawnFlask() {
     const backendPath = getBackendPath();
-    const pythonExe   = getPythonExecutable();
-    const appScript   = path.join(backendPath, 'app.py');
+    const pythonExe = getPythonExecutable();
+    const appScript = path.join(backendPath, 'app.py');
 
     if (!pythonExe) {
         showNotification('LANxfer — Python Not Found',
@@ -98,15 +98,15 @@ function spawnFlask() {
     console.log(`[Flask] CWD: ${backendPath}`);
 
     flaskProcess = spawn(pythonExe, [appScript], {
-        cwd:   backendPath,
+        cwd: backendPath,
         stdio: ['ignore', 'pipe', 'pipe'],
         // shell: true fixes spaces-in-path issues on Windows
         shell: IS_WIN,
-        env:   {
+        env: {
             ...process.env,
-            FLASK_ENV:        'production',
+            FLASK_ENV: 'production',
             PYTHONUNBUFFERED: '1',
-            PYTHONPATH:       backendPath
+            PYTHONPATH: backendPath
         }
     });
 
@@ -155,8 +155,8 @@ function waitForFlask(maxAttempts = 30, interval = 500) {
             // Use https since your Flask runs with SSL
             const req = https.get({
                 hostname: 'localhost',
-                port:     FLASK_PORT,
-                path:     '/health',
+                port: FLASK_PORT,
+                path: '/health',
                 // Accept self-signed cert (your cert.pem is self-signed)
                 rejectUnauthorized: false
             }, (res) => {
@@ -262,25 +262,25 @@ function createOverlayWindow() {
     const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
     const WIN_W = 1250;
     const WIN_H = 950;
-    const posX  = sw - WIN_W - 20;
-    const posY  = sh - WIN_H - 20;
+    const posX = sw - WIN_W - 20;
+    const posY = sh - WIN_H - 20;
 
     overlayWindow = new BrowserWindow({
-        width:       WIN_W,
-        height:      WIN_H,
-        x:           posX,
-        y:           posY,
-        show:        false,
-        frame:       false,
+        width: WIN_W,
+        height: WIN_H,
+        x: posX,
+        y: posY,
+        show: false,
+        frame: false,
         transparent: true,
-        resizable:   true,
+        resizable: true,
         skipTaskbar: true,
         alwaysOnTop: true,
         webPreferences: {
-            preload:          path.join(__dirname, 'preload.js'),
+            preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration:  false,
-            zoomFactor:       1.0
+            nodeIntegration: false,
+            zoomFactor: 1.0
         }
     });
 
@@ -302,7 +302,8 @@ function createOverlayWindow() {
             }
         });
 
-       overlayWindow.webContents.insertCSS(`
+        overlayWindow.webContents.insertCSS(`
+      #deltaChart { width: 100% !important; height: 180px !important; }      
     html { overflow-y: auto !important; overflow-x: hidden !important; }
     body {
         background: rgba(0, 0, 0, 0.93) !important;
@@ -315,7 +316,7 @@ function createOverlayWindow() {
     ::-webkit-scrollbar-track { background: #000; }
     ::-webkit-scrollbar-thumb { background: #00ff41; border-radius: 2px; }
 `);
-// ← .nav-bar { display: none !important; } is REMOVED
+        // ← .nav-bar { display: none !important; } is REMOVED
 
 
     });
@@ -392,18 +393,34 @@ function openMainWindow(route = '/') {
     }
 
     mainWindow = new BrowserWindow({
-        width:       1100,
-        height:      700,
-        minWidth:    800,
-        minHeight:   500,
-        title:       'LANxfer 2.0',
-        icon:        path.join(__dirname, 'assets', IS_WIN ? 'icon.ico' : 'icon.png'),
+        width: 1100,
+        height: 700,
+        minWidth: 800,
+        minHeight: 500,
+        title: 'LANxfer 2.0',
+        icon: path.join(__dirname, 'assets', IS_WIN ? 'icon.ico' : 'icon.png'),
         webPreferences: {
-    preload:                path.join(__dirname, 'preload.js'),
-    contextIsolation:       true,
-    nodeIntegration:        false,
-}
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+        }
 
+    });
+
+    const { session } = require('electron');
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    "default-src 'self' https:; " +
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.socket.io; " +
+                    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+                    "font-src 'self' https://fonts.gstatic.com; " +
+                    "connect-src 'self' https: wss:;"
+                ]
+            }
+        });
     });
 
     mainWindow.loadURL(`${FLASK_URL}${route}`);
@@ -454,7 +471,7 @@ function showNotification(title, body, onClick = null) {
     const n = new Notification({
         title,
         body,
-        icon:   path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         silent: false
     });
 
@@ -490,7 +507,7 @@ ipcMain.handle('is-flask-ready', () => flaskReady);
 // 7. APP LIFECYCLE
 // ═══════════════════════════════════════════════════════════
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
-
+app.commandLine.appendSwitch('ignore-certificate-errors');
 app.whenReady().then(async () => {
     // ← ADD THIS — allows self-signed SSL cert for localhost
     app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
@@ -535,6 +552,11 @@ app.whenReady().then(async () => {
         console.error('[App] Flask failed to start:', err);
         showNotification('LANxfer Error', 'Backend failed to start. Check logs.');
     }
+});
+
+app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+    event.preventDefault();
+    callback(true); // trust all certs — ok for LAN self-signed
 });
 
 // Prevent app from quitting when all windows closed
