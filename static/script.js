@@ -754,7 +754,8 @@ function renderPeerCards(peers) {
         });
 
         // Highlight if already selected
-        if (recipientSelect.value === peer.ip) {
+        const recipientSelectEl = document.getElementById('recipientSelect');
+        if (recipientSelectEl && recipientSelectEl.value === peer.ip) {
             card.classList.add('selected');
         }
 
