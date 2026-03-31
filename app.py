@@ -355,7 +355,7 @@ def get_qr_code():
     qr.add_data(connect_url)
     qr.make(fit=True)
     img    = qr.make_image(fill_color="#00ff00", back_color="black")
-    buffer = BytesIO()
+    buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     buffer.seek(0)
     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
